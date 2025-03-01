@@ -116,12 +116,24 @@ load_file(Spec, String) :-
 %   Handle a terminal hyperlink to ``file://`` links
 
 tty_link(Link) :-
-    debug(tty(hyperlink), 'Opening tty link ~p~n', [Link]),
     string_concat("file://", Encoded, Link),
+    !,
+    debug(tty(hyperlink), 'Opening tty file link ~p~n', [Link]),
     string_codes(Encoded, Codes),
     phrase(percent_decode(UTF8), Codes),
     phrase(utf8_codes(FileCodes), UTF8),
     phrase(link_location(Location), FileCodes),
+    edit_source(Location).
+tty_link(Link) :-
+    debug(tty(hyperlink), 'Opening tty link ~p~n', [Link]),
+    string_codes(Link, Codes),
+    phrase(percent_decode(UTF8), Codes),
+    phrase(utf8_codes(URLCodes), UTF8),
+    phrase(link_location(Location), URLCodes),
+    memberchk(file(URL), Location),
+    uri_is_global(URL),
+    file_name_extension(_, pl, URL),
+    !,
     edit_source(Location).
 
 percent_decode([H|T]) -->

@@ -185,12 +185,13 @@ function print_output(line, cls, sgr) {
 };
 
 
-function tty_link(ev)
+async function tty_link(ev)
 { const a = ev.target;
   const to = a.href;
-  if ( to.startsWith("file://") )
+  if ( to.startsWith("file://") ||
+       to.match("https?://.*\\.pl\(#\d+\)?") )
   { ev.preventDefault();
-    Prolog.query("tinker:tty_link(Link)", {Link:to}).once();
+    await Prolog.forEach("tinker:tty_link(Link)", {Link:to});
   }
   // Use default action
 }
