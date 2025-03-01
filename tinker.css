@@ -23,6 +23,14 @@ body {
     margin-right: 2ex;
 }
 
+div.github-buttons {
+    position: absolute;
+    top: var(--margin);
+    right: var(--margin);
+    display: inline-block;
+    float: right;
+}
+
 .content {
     position: relative;
     flex-grow: 1;
