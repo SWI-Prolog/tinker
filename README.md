@@ -1,46 +1,56 @@
-# SWI-Prolog in the browser
+# SWI-Tinker: SWI-Prolog in your browser
 
 Public demo at https://wasm.swi-prolog.org/wasm/tinker
 
-## TODO
+This repository implements SWI-Tinker, a SWI-Prolog playground running
+in    your    browser    based   on    SWI-Prolog    compiled    using
+[Emscripten](https://emscripten.org/)                               to
+[WASM](https://webassembly.org/).
 
- - Implement `?code=` and `?url=` (copy SWISH?)
- - Replace query input with CodeMirror instance.
- - Connect Prolog highlighting
- - Compile library to .qlf
- - Load additional (big) libraries from the server.  Examples
-   - sCASP
-   - CHR
-   - ...
- - Turn tinker.js into one or more proper modules, using classes.
-   - Allow for embedding, i.e., create a Prolog instance on a
-     `<div>`, optionally holding the Prolog code.
- - Support more input predicates
-   - get_code/1, etc.						[done]
-   - library(readutil)
-   - Wrap libraries automatically after they are loaded?
-   - Replace toplevel emscripten conditional code with wrapping
- - Turn into a new GIT submodule?
- - Allow save/load from GitHub?
- - Add cls/0 and html/1 predicates to tinker.pl		[done]
- - Extend debugger
-   - Support more commands
-   - Sync source window with current location?
-   - Nicer icons
- - Toplevel interaction
-   - Add default toplevel actions
-     - t, *, +, -, b, w, p
-   - Show answer terms using HTML?
-   - History search (Ctrl-R)?
-   - Show history
-   - Add button to reuse query					[done]
-   - Input completion?  Currently minimal completion using
-     [tab].  Should show box as you type.
-   - How to deal with halt/0,1 and `end_of_file`?  Probably
-     best to ignore.
- - Provide a dark mode
+The  current   system  is  primarily  a   proof-of-concept.   You  are
+encouraged to help improving it.  The  TODO.md file in this repo gives
+a list of possible improvements.
 
-## Bugs
+## Achieved functionality
 
- - include/1 when loading from the web.				[fixed]
- - absolute_file_name/3 should handle URLs			[fixed]
+  - Run SWI-Prolog in your browser
+  - Basic REPL loop window
+  - Basic editor support based on [CodeMirror](https://codemirror.net/)
+  - Saves command history and programs to your browser _local store_
+  - Allows uploading and downloading programs
+  - Allows for loading (compiling) these programs as well a loading
+    programs directly from the internet.
+  - Load large programs quickly as `.qlf` files.
+  - Support for a basic debugger using the common `?- trace, mygoal.`
+    command.   Support for spy- and break-points.
+
+## Limitations and alternatives
+
+SWI-Tinker is over 10 times slower  than native SWI-Prolog on the same
+hardware.   SWI-Tinker lacks  many libraries  bundled with  the native
+version, either for  reducing the size or  because required primitives
+are lacking.  It  also lacks important features of  SWI-Prolog such as
+_multi threading_ and  access to a lot of system  resources.  To get a
+list of available and not-available libraries, run
+
+    ?- check_installation.
+
+Some alternatives for running Prolog in your browser are:
+
+  - [SWISH](https://swish.swi-prolog.org) provides a server-based
+    alternative, i.e., your queries are executed on a server. The
+	SWISH environment is much more evolved, providing _notebooks_,
+	file storage including version control, file sharing, etc.
+	SWISH supports a different set of features.  Queries on SWISH
+	are executed _stateless_ and are limited by a _sandbox_.
+  - [Ciao playground](https://ciao-lang.org/playground/) provides
+    a WASM based version of Ciao Prolog.
+  - [Tau Prolog](http://tau-prolog.org/) provides a Prolog version
+    completely written in JavaScript.
+
+## Acknowledgements
+
+Raivo Laanemets did most of the  ground work getting SWI-Prolog to run
+using    WASM.     Jesse    Wright   provides    the    npm    package
+[swipl-wasm](https://www.npmjs.com/package/swipl-wasm).       Torbjörn
+Lager created the first version of SWISH.
