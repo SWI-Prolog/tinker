@@ -8,8 +8,8 @@ in    your    browser    based   on    SWI-Prolog    compiled    using
 [WASM](https://webassembly.org/).
 
 The  current   system  is  primarily  a   proof-of-concept.   You  are
-encouraged to help improving it.  The  TODO.md file in this repo gives
-a list of possible improvements.
+encouraged to  help improving  it.  The  [TODO](TODO.md) file  in this
+repo gives a list of possible improvements.
 
 ## Achieved functionality
 
