@@ -50,7 +50,7 @@ const editor	    = document.getElementById('editor');
 const select_file   = document.getElementById('select-file');
 const abort	    = document.getElementById('abort');
 const keyboard	    = document.getElementById('keyboard');
-let   yield	    = null;
+let   waitfor	    = null;
 let   abort_request = false;
 let   history       = { stack: [], current: null };
 let   files	    = { current: default_file,
@@ -98,7 +98,7 @@ function initCodeMirror(cont)
 	  ], (cm) => {
 	    CodeMirror = cm;
 	    createCM();
-	    restoreFiles();
+	    Persist.restore();
 	    addExamples().then(()=>{cont();});
 	  });
 }
@@ -247,9 +247,7 @@ function tty_size()
  * its answer.
  */
 
-function current_answer()
-{ return answer;
-}
+window.current_answer = () => answer;
 
 
 /** Add a structure for a query.  The structure is
@@ -350,9 +348,9 @@ function next_answer()
 function query(query)
 { add_query(query);
 
-  if ( yield && yield.yield == "query" )
+  if ( waitfor && waitfor.yield == "query" )
   { set_state("run");
-    next(yield.resume(query));
+    next(waitfor.resume(query));
   } else
   { Prolog.call(query);
   }
@@ -384,7 +382,7 @@ function submitQuery(queryElem)
   }
 
   set_state("run");
-  next(yield.resume(query));
+  next(waitfor.resume(query));
   return true;
 }
 
@@ -484,9 +482,9 @@ input.addEventListener("keyup", (event) =>
 
 abort.addEventListener('submit', (e) => {
   e.preventDefault();
-  if ( yield && yield.abort )
-  { console.log("aborting", yield);
-    yield.abort();
+  if ( waitfor && waitfor.abort )
+  { console.log("aborting", waitfor);
+    waitfor.abort();
   } else
   { console.log("Requesting abort");
     abort_request = true;
@@ -496,12 +494,12 @@ abort.addEventListener('submit', (e) => {
 // Next/Stop
 
 function reply_more(action)
-{ if ( yield && yield.yield == "more" )
+{ if ( waitfor && waitfor.yield == "more" )
   { switch(action)
     { case "redo":     print_output(";", "stdout"); next_answer(); break;
       case "continue": print_output(".", "stdout"); answer_ignore_nl = true; break;
     }
-    next(yield.resume(action));
+    next(waitfor.resume(action));
   }
 }
 
@@ -510,7 +508,7 @@ function reply_more(action)
 		 *******************************/
 
 function reply_trace(action)
-{ if ( yield && yield.yield == "trace" )
+{ if ( waitfor && waitfor.yield == "trace" )
   { print_output(` [${action}]`, "stderr", {color: "#888"});
     Prolog.call("nl(user_error)", {nodebug:true});
 
@@ -518,12 +516,12 @@ function reply_trace(action)
     { case "goals":
       case "listing":
       case "help":
-      { trace_action(action, yield.trace_event);
+      { trace_action(action, waitfor.trace_event);
 	break;
       }
       default:
       { set_state("run");
-	next(yield.resume(action));
+	next(waitfor.resume(action));
       }
     }
   }
@@ -580,21 +578,21 @@ function set_state(state)
 }
 
 function next(rc)
-{ yield = null;
+{ waitfor = null;
 
   if ( rc.yield !== undefined )
-  { yield = rc;
+  { waitfor = rc;
 
     Prolog.flush_output();
 
     if ( abort_request )
     { abort_request = false;
-      return next(yield.resume("wasm_abort"));
+      return next(waitfor.resume("wasm_abort"));
     }
 
     switch(rc.yield)
     { case "beat":
-        return setTimeout(() => next(yield.resume("true")), 0);
+        return setTimeout(() => next(waitfor.resume("true")), 0);
       case "query":
         answer = undefined;
         /*FALLTHROUGH*/
@@ -608,7 +606,7 @@ function next(rc)
         document.getElementById("more.next").focus();
         break;
       case "trace":
-      { trace_action("print", yield.trace_event);
+      { trace_action("print", waitfor.trace_event);
         set_state("trace");
         document.getElementById("trace.creep").focus();
         break;
@@ -691,7 +689,7 @@ async function addExamples()
 
 editor.addEventListener('submit', (e) => {
   e.preventDefault();
-  saveFile(files.current);
+  Persist.saveFile(files.current);
   query(`consult('${files.current}').`);
 }, false);
 
@@ -780,11 +778,11 @@ function switchToFile(name)
 
   if ( files.current != name )
   { if ( files.current )
-      saveFile(files.current);
+      Persist.saveFile(files.current);
     files.current = name;
     if ( !files.list.includes(name) )
       files.list.push(name);
-    loadFile(name);
+    Persist.loadFile(name);
     updateDownload(name);
   }
 }
@@ -816,7 +814,7 @@ function selectedFile()
 }
 
 document.getElementById("select-file").onchange = (e) => {
-  opt = select_file.options[select_file.selectedIndex];
+  const opt = select_file.options[select_file.selectedIndex];
 
   if ( opt.className == "url" )
   { fetch(opt.value)
@@ -874,7 +872,7 @@ async function download_files(files)
     addFileOption(name);
     switchToFile(name);
     cm.setValue(content);
-    saveFile(name);
+    Persist.saveFile(name);
   }
 }
 
@@ -894,62 +892,63 @@ document.querySelector("a.btn.upload").addEventListener("click", (ev) => {
 		 *        PERSIST FILES         *
 		 *******************************/
 
-function persistsFile(name)
-{ if ( is_user_file(name) )
-  { try
-    { let content = Module.FS.readFile(name, { encoding: 'utf8' });
-      localStorage.setItem(name, content);
-    } catch(e)
-    { localStorage.removeItem(name);
+class Persist
+{ static autosave = true;
+
+  static persistsFile(name)
+  { if ( is_user_file(name) )
+    { try
+      { let content = Module.FS.readFile(name, { encoding: 'utf8' });
+	localStorage.setItem(name, content);
+      } catch(e)
+      { localStorage.removeItem(name);
+      }
     }
   }
-}
 
-function restoreFile(name)
-{ let content = localStorage.getItem(name)||"";
+  static restoreFile(name)
+  { let content = localStorage.getItem(name)||"";
 
-  if ( content || name == default_file )
-  { Module.FS.writeFile(name, content);
-    addFileOption(name);
-  } else
-  { files.list = files.list.filter((n) => (n != name));
+    if ( content || name == default_file )
+    { Module.FS.writeFile(name, content);
+      addFileOption(name);
+    } else
+    { files.list = files.list.filter((n) => (n != name));
+    }
   }
-}
 
-function restoreFiles()
-{ let f = localStorage.getItem("files");
-  if ( f ) files = JSON.parse(f);
+  static restoreFiles()
+  { const self = this;
+    let f = localStorage.getItem("files");
+    if ( f ) files = JSON.parse(f);
 
-  files.list.forEach((f) => restoreFile(f));
-  if ( !files.list.includes(default_file) )
-    files.list.unshift(default_file);
+    files.list.forEach((f) => self.restoreFile(f));
+    if ( !files.list.includes(default_file) )
+      files.list.unshift(default_file);
 
-  let current = files.current;
-  files.current = null;
-  switchToFile(current || default_file);
-}
-
-function loadFile(name)
-{ name = name || files.current;
-
-  try
-  { let content = Module.FS.readFile(name, { encoding: 'utf8' });
-    cm.setValue(content);
-  } catch(e)
-  { cm.setValue("");
+    let current = files.current;
+    files.current = null;
+    switchToFile(current || default_file);
   }
-}
 
-function saveFile(name, force)
-{ if ( force || is_user_file(name) )
-  { Module.FS.writeFile(name, cm.getValue());
+  static loadFile(name)
+  { name = name || files.current;
+
+    try
+    { let content = Module.FS.readFile(name, { encoding: 'utf8' });
+      cm.setValue(content);
+    } catch(e)
+    { cm.setValue("");
+    }
   }
-}
 
-let autosave = true;
+  static saveFile(name, force)
+  { if ( force || is_user_file(name) )
+    { Module.FS.writeFile(name, cm.getValue());
+    }
+  }
 
-window.onunload = (e) =>
-{ if ( autosave )
+  static persist()
   { localStorage.setItem("history", JSON.stringify(history));
     const l = files.list.filter((n) => is_user_file(n)||n == default_file);
     const save =
@@ -959,25 +958,34 @@ window.onunload = (e) =>
 
     localStorage.setItem("files",   JSON.stringify(save));
 
-    save.list.forEach((f) => persistsFile(f));
+    save.list.forEach((f) => this.persistsFile(f));
+  }
+
+  static restoreHistory()
+  { const h = localStorage.getItem("history");
+
+    if ( h )
+      history = JSON.parse(h);
+  }
+
+  static restore()
+  { this.restoreFiles();
+    this.restoreHistory();
   }
 }
 
-(function restore()
-{ let h = localStorage.getItem("history");
-
-  if ( h ) history = JSON.parse(h);
-})();
+window.onunload = (e) =>
+{ if ( Persist.autosave )
+  Persist.persist();
+}
 
 		 /*******************************
 		 *          DEMO CALLS          *
 		 *******************************/
 
-function add_one(n)
-{ return n+1;
-}
+window.add_one = (n) => n+1;
 
-function promise_any(data)
+window.promise_any = (data) =>
 { console.log(data);
 
   return new Promise(function(resolve, reject)
