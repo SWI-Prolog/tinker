@@ -89,6 +89,7 @@ function initCodeMirror(cont)
 		      theme: "prolog",
 		      prologKeys: true
                     });
+    window.cm = cm;
   }
 
   require(["cm/lib/codemirror",
