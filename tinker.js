@@ -758,10 +758,18 @@ class TinkerQuery {
    * Handle the "Next"/"Stop" buttons
    */
   reply_more(action) {
-    if ( waitfor && waitfor.yield == "more" )
-    { switch(action)
-      { case "redo":     print_output(";", "stdout"); this.next_answer(); break;
-	case "continue": print_output(".", "stdout"); answer_ignore_nl = true; break;
+    if ( waitfor && waitfor.yield == "more" ) {
+      switch(action)
+      { case "redo":
+	{ print_output(";", "stdout");
+	  this.next_answer();
+	  break;
+	}
+	case "continue":
+	{ print_output(".", "stdout");
+	  answer_ignore_nl = true;
+	  break;
+	}
       }
       next(waitfor.resume(action), this);
     }
