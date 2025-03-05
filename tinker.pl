@@ -89,15 +89,15 @@ prolog_edit:edit_source(Spec) :-
 edit_source(Spec) :-
     memberchk(file(File), Spec),
     load_file(File, String),
-    _ := addFileOption(#File),
-    _ := switchToFile(#File),
-    _ := cm.setValue(String),
+    _ := source.addFileOption(#File),
+    _ := source.switchToFile(#File),
+    _ := source.setValue(String),
     (   memberchk(line(Line), Spec)
     ->  (   memberchk(linepos(LinePos), Spec)
         ->  Options = _{linepos:LinePos}
         ;   Options = _{}
         ),
-        _ := cm_goto(cm, Line, Options)
+        _ := source.goto(Line, Options)
     ;   true
     ).
 

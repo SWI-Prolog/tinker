@@ -80,22 +80,22 @@
     </div>
   </div>
 
-  <div class="editor-container" id="right">
-    <form id="editor">
-      <div id="editor-files">
-      <select id="select-file">
-      </select>
-      <button id="delete-file">&#128465;</button>
-      <button id="new-file">+</button>
-      <span id="create-file">
-        <input type="text" id="file-name" placeholder="File name">
-        <button id="create-button">Create</button>
-      </span>
+  <div class="source-container" id="right">
+    <form name="source">
+      <div class="source-files">
+	<select name="select-file">
+	</select>
+	<button name="delete-file">&#128465;</button>
+	<button name="new-file">+</button>
+	<span class="create-file">
+          <input type="text" name="file-name" placeholder="File name">
+          <button name="create-button">Create</button>
+	</span>
       </div>
       <div class="editor-wrapper">
-      <div id="file"></div> <!-- Filled with CodeMirror -->
+	<div name="editor"></div> <!-- Filled with CodeMirror -->
       </div>
-      <div class="editor-buttons">
+      <div class="source-buttons">
 	<button>(Re)consult</button>
 	<span class="exch-files">
 	  <input type="file" accept=".pl" multiple class="upload-file">

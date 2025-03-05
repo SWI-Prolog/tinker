@@ -38,8 +38,12 @@
 
 const user_dir      = "/prolog"
 const default_file  = `${user_dir}/scratch.pl`;
+let   files	    = { current: default_file,
+			list: [default_file]
+		      };
+let   source;			// right pane (editor + file actions)
+let   cm;			// The editor (TODO: remove)
 
-let   cm;
 const terminal	    = document.getElementById('console');
 const output	    = document.getElementById('output');
 let   answer;
@@ -47,16 +51,11 @@ let   answer_ignore_nl = false;
 const input	    = document.getElementById('input');
 const more	    = document.getElementById('more');
 const trace	    = document.getElementById('trace');
-const editor	    = document.getElementById('editor');
-const select_file   = document.getElementById('select-file');
 const abort	    = document.getElementById('abort');
 const keyboard	    = document.getElementById('keyboard');
 let   waitfor	    = null;
 let   abort_request = false;
 let   history       = { stack: [], current: null };
-let   files	    = { current: default_file,
-			list: [default_file]
-		      };
 
 function user_file(file)
 { return `${user_dir}/${file}`;
@@ -67,8 +66,350 @@ function is_user_file(file)
 }
 
 		 /*******************************
+		 *            SOURCE            *
+		 *******************************/
+
+/**
+ * Encapsulate the  right pane of  Tinker, providing the  editor, file
+ * selector, (re)consult button and up/download buttons.
+ */
+
+class TinkerSource {
+  select_file;			// File selector
+  editor;			// TinkerEditor instance
+  elem;				// The <form>
+
+  constructor(elem) {
+    const self = this;
+    this.elem = elem;
+    this.select_file = this.byname("select-file");
+    this.editor = new TinkerEditor(this.byname("editor"),
+				   () => self.afterEditor());
+    window.cm = cm = this.editor;	// TODO hack
+
+    this.armFileSelect();
+    this.armNewFileButton();
+    this.armFileCreateButton();
+    this.armDeleteFile();
+    this.armDownloadButton();
+    this.armUploadButton();
+    this.armConsult();
+  }
+
+  afterEditor() {
+    this.addExamples();
+    toplevel();
+  }
+
+  setValue(source)    { this.editor.setValue(source); }
+  goto(line, options) { this.editor.goto(line, options); }
+
+
+  /**
+   * Add the examples to the file selector.  This is not ideal as
+   * the standard HTML `<select>` does not allow for styling.
+   */
+  async addExamples() {
+    const json = await fetch("examples/index.json").then((r) => {
+      return r.json();
+    });
+
+    if ( Array.isArray(json) && json.length > 0 ) {
+      const select = this.select_file;
+      const sep = document.createElement("option");
+      sep.textContent = "Demos";
+      sep.disabled = true;
+      select.appendChild(sep);
+
+      json.forEach((ex) => {
+	if ( !this.hasFileOption(select, this.userFile(ex.name)) ) {
+	  const opt = document.createElement("option");
+	  opt.className = "url";
+	  opt.value = "/wasm/examples/"+ex.name;
+	  opt.textContent = (ex.comment||ex.name) + " (demo)";
+	  select.appendChild(opt);
+	}
+      });
+    }
+  }
+
+  /**
+   * Add name to the file menu.
+   * @param {string} name is the absolute name of the file that
+   * is stored in the `value` attribute of the `<option>` element.
+   * @return {HTMLElement} holding the `<option>` element.
+   */
+  addFileOption(name) {
+    const select = this.select_file;
+    let node = this.hasFileOption(name);
+
+    if ( !node )
+    { node = document.createElement('option');
+      node.textContent = this.baseName(name);
+      node.value = name;
+      node.selected = true;
+      const sep = this.demoOptionSep();
+      if ( sep )
+	select.insertBefore(node, sep);
+      else
+	select.appendChild(node);
+    }
+
+    return node;
+  }
+
+  /**
+   * Switch the source view to a specific file.  This updates the file
+   * selector, saves the old file and loads the new file.
+   * @param {string} name is the full path of the file to switch to.
+   */
+  switchToFile(name) {
+    const options = Array.from(this.select_file.childNodes);
+
+    options.forEach((e) => {
+      e.selected = e.value == name;
+    });
+
+    if ( files.current != name ) {
+      if ( files.current )
+	Persist.saveFile(files.current);
+      files.current = name;
+      if ( !files.list.includes(name) )
+	files.list.push(name);
+      Persist.loadFile(name);
+      this.updateDownload(name);
+    }
+  }
+
+  /**
+   * Delete a  file from  the menu,  the file  system and  the browser
+   * localStorage.  The source view switches  to the next file, unless
+   * this is the last.  In that case it switches to the previous.
+   *
+   * @param {string} file is the file to be deleted.
+   */
+
+  deleteFile(file) {
+    const select = this.select_file;
+    const opt = this.hasFileOption(file);
+    let to = opt.nextElementSibling;
+    const sep = this.demoOptionSep();
+    if ( !to || to == sep )
+      to = opt.previousElementSibling;
+    if ( !to )
+      to = default_file;
+    this.switchToFile(to.value);
+    opt.parentNode.removeChild(opt);
+    files.list = files.list.filter((n) => (n != file));
+    localStorage.removeItem(file);
+    Module.FS.unlink(file);
+  }
+
+  currentFileOption() {
+    return this.select_file.options[this.select_file.selectedIndex];
+  }
+
+  hasFileOption(name) {
+    return Array.from(this.select_file.childNodes)
+                .find((n) => n.value == name );
+  }
+
+  demoOptionSep() {
+    return Array.from(this.select_file.childNodes)
+                .find((n) => n.textContent == "Demos" && n.disabled);
+  }
+
+  armFileSelect() {
+    this.select_file.addEventListener("change", (e) => {
+      const opt = this.currentFileOption();
+
+      if ( opt.className == "url" ) {
+	fetch(opt.value)
+	  .then((res) => res.text())
+	  .then((s) => {
+	    const name = this.baseName(opt.value);
+	    opt.className = "local";
+	    opt.value = this.userFile(name);
+	    opt.textContent = name;
+	    Module.FS.writeFile(opt.value, s);
+	    this.switchToFile(opt.value);
+	  });
+      } else
+      { this.switchToFile(opt.value);
+      }
+    });
+  }
+
+  armNewFileButton() {
+    const btn = this.byname("new-file");
+    btn.addEventListener("click", (e) => {
+      const fname = this.byname("file-name");
+      e.preventDefault();
+      this.elem.classList.add("create-file");
+      e.target.disabled = true;
+      fname.value = "";
+      fname.focus();
+    });
+  }
+
+  armFileCreateButton() {
+    const btn = this.byname("create-button");
+    const input = this.byname("file-name");
+
+    input.addEventListener("keydown", (e) => {
+      if ( e.key === "Enter" )
+	btn.click();
+    });
+
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      let name  = input.value.trim();
+
+      if ( /^[a-zA-Z 0-9.-_]+$/.test(name) )
+      { if ( ! /\.pl$/.test(name) )
+	name += ".pl";
+
+	name = this.userFile(name);
+	this.addFileOption(name);
+	this.switchToFile(name);
+	this.elem.classList.remove("create-file");
+	this.byname("new-file").disabled = false;
+      } else
+      { alert("No or invalid file name!");
+      }
+    });
+  }
+
+  armDeleteFile() {
+    const btn = this.byname("delete-file");
+    if ( btn ) {
+      btn.addEventListener("click", (e) => {
+	e.preventDefault();
+	const del = this.currentFileOption().value;
+
+	if ( del == default_file )
+	{ alert("Cannot delete the default file");
+	  return;
+	}
+	if ( !this.isUserFile(del) )
+	{ alert("Cannot delete system files");
+	  return;
+	}
+	this.deleteFile(del);
+      });
+    }
+  }
+
+  /**
+   * Update the  title and  download location  of the  download button
+   * after switching files.
+   */
+  updateDownload(file) {
+    const btn = this.elem.querySelector("a.btn.download");
+    if ( btn ) {
+      file = this.baseName(file);
+      btn.download = file;
+      btn.title = `Download ${file}`;
+      btn.href = "download";
+    }
+  }
+
+  armDownloadButton() {
+    const btn = this.elem.querySelector("a.btn.download");
+    if ( btn ) {
+      btn.addEventListener("click", (ev) => {
+	const text = this.getValue();
+	const data = new Blob([text]);
+	const btn = ev.target;
+	btn.href = URL.createObjectURL(data);
+      })
+    }
+  }
+
+  async download_files(files) {
+    for(let i=0; i<files.length; i++) {
+      const file = files[i];
+      const content = await this.readAsText(file);
+      const name = this.userFile(this.baseName(file.name));
+      this.addFileOption(name);
+      this.switchToFile(name);
+      this.setValue(content);
+      Persist.saveFile(name);
+    }
+  }
+
+  armUploadButton() {
+    const btn = this.elem.querySelector("a.btn.upload");
+    if ( btn ) {
+      btn.addEventListener("click", (ev) => {
+	const exch = ev.target.closest("span.exch-files");
+	if ( exch.classList.contains("upload-armed") )
+	{ const files = exch.querySelector('input.upload-file').files;
+	  download_files(files).then(() => {
+	    exch.classList.remove("upload-armed");
+	  });
+	} else
+	{ exch.classList.add("upload-armed")
+	}
+      });
+    }
+  }
+
+  /**
+   * Arm the form submit button.
+   */
+
+  armConsult() {
+    this.elem.addEventListener('submit', (e) => {
+      e.preventDefault();
+      Persist.saveFile(files.current);
+      query(`consult('${files.current}').`);
+    }, false);
+  }
+
+  /**
+   * @return {Promise} for handling the content of an uploaded file.
+   */
+  readAsText(file) {
+    return new Promise((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onerror = reject;
+        fr.onload = () => {
+            resolve(fr.result);
+        }
+        fr.readAsText(file);
+    });
+  }
+
+  userFile(file) {
+    return `${user_dir}/${file}`;
+  }
+
+  isUserFile(file) {
+    return file.startsWith(`${user_dir}/`);
+  }
+
+  baseName(path) {
+    return path.split("/").pop();
+  }
+
+  byname(name) {
+    return this.elem.querySelector(`[name=${name}]`);
+  }
+} // end class TinkerSource
+
+
+		 /*******************************
 		 *      THE SOURCE EDITOR       *
 		 *******************************/
+
+/**
+ * Encapsulate  the  editor.   In  this  case  the  actual  editor  is
+ * CodeMirror.  Defines methods to
+ *   - Initialise the editor
+ *   - Set and get its value
+ *   - Go to a line/column
+ */
 
 class TinkerEditor {
   static cm_url = "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.9";
@@ -107,7 +448,7 @@ class TinkerEditor {
 	      this.CodeMirror = cm;
 	      this.createCM(container);
 	      Persist.restore();
-	      addExamples().then(()=>{cont();});
+	      cont.call(this.cm);
 	    });
 
     loadCss(cm_swi("/theme/prolog.css"));
@@ -150,12 +491,12 @@ class TinkerEditor {
     const ch = options.linepos||0;
 
     function clearSearchMarkers(cm)
-    { if ( this.cm._searchMarkers !== undefined )
-      { for(let i=0; i<this.cm._searchMarkers.length; i++)
-	this.cm._searchMarkers[i].clear();
-	this.cm.off("cursorActivity", clearSearchMarkers);
+    { if ( cm._searchMarkers !== undefined )
+      { for(let i=0; i<cm._searchMarkers.length; i++)
+	cm._searchMarkers[i].clear();
+	cm.off("cursorActivity", clearSearchMarkers);
       }
-      this.cm._searchMarkers = [];
+      cm._searchMarkers = [];
     }
 
     clearSearchMarkers(this.cm);
@@ -172,7 +513,7 @@ class TinkerEditor {
 		  }));
     this.cm.on("cursorActivity", clearSearchMarkers);
   }
-}
+} // End class TinkerEditor
 
 
 		 /*******************************
@@ -273,7 +614,7 @@ function tty_size()
  */
 
 window.current_answer = () => answer;
-
+window.tty_size = tty_size;
 
 /** Add a structure for a query.  The structure is
  *
@@ -681,239 +1022,10 @@ SWIPL(options).then(async (module) =>
       await Prolog.consult("tinker.pl", {module:"system"});
       Prolog.query("tinker:tinker_init(Dir)", {Dir:user_dir}).once();
       Prolog.call("version");
-      cm = new TinkerEditor(document.getElementById("file"),
-			    toplevel);
-      window.editor = cm;
+      window.source = source = new TinkerSource(
+	document.querySelector("form[name=source]"));
     });
 
-async function addExamples()
-{ const json = await fetch("examples/index.json").then((r) =>
-  { return r.json();
-  });
-
-  if ( Array.isArray(json) && json.length > 0 )
-  { const select = select_file;
-    const sep = document.createElement("option");
-    sep.textContent = "Demos";
-    sep.disabled = true;
-    select.appendChild(sep);
-
-    json.forEach((ex) =>
-      { if ( !hasFileOption(select, user_file(ex.name)) )
-	{ const opt = document.createElement("option");
-	  opt.className = "url";
-	  opt.value = "/wasm/examples/"+ex.name;
-	  opt.textContent = (ex.comment||ex.name) + " (demo)";
-	  select.appendChild(opt);
-	}
-      });
-  }
-}
-
-		 /*******************************
-		 *      EDITOR AND CONSULT      *
-		 *******************************/
-
-editor.addEventListener('submit', (e) => {
-  e.preventDefault();
-  Persist.saveFile(files.current);
-  query(`consult('${files.current}').`);
-}, false);
-
-document.getElementById('new-file').onclick = (e) => {
-  fname = document.getElementById("file-name");
-  e.preventDefault();
-  editor.className = "create-file";
-  e.target.disabled = true;
-  fname.value = "";
-  fname.focus();
-};
-
-document.getElementById('file-name').onkeydown = (e) => {
-  if ( e.key === "Enter" )
-  { e.preventDefault();
-    document.getElementById('create-button').click();
-  }
-};
-
-function deleteFile(file)
-{ const select = select_file;
-  const opt = hasFileOption(select, file);
-  let to = opt.nextElementSibling;
-  const sep = demoOptionSep(select);
-  if ( !to || to == sep )
-    to = opt.previousElementSibling;
-  if ( !to )
-    to = default_file;
-  switchToFile(to.value);
-  opt.parentNode.removeChild(opt);
-  files.list = files.list.filter((n) => (n != file));
-  localStorage.removeItem(file);
-  Module.FS.unlink(file);
-}
-
-document.getElementById('delete-file').onclick = (e) => {
-  e.preventDefault();
-  const del = selectedFile();
-
-  if ( del == default_file )
-  { alert("Cannot delete the default file");
-    return;
-  }
-  if ( !is_user_file(del) )
-  { alert("Cannot delete system files");
-    return;
-  }
-  deleteFile(del);
-};
-
-function baseName(path)
-{ return path.split("/").pop();
-}
-
-function hasFileOption(select, name)
-{ return Array.from(select.childNodes).find((n) => n.value == name );
-}
-
-function demoOptionSep(select)
-{ return Array.from(select_file.childNodes).find(
-  (n) => n.textContent == "Demos" && n.disabled);
-}
-
-function addFileOption(name)
-{ const select = select_file;
-
-  if ( !hasFileOption(select, name) )
-  { const node = document.createElement('option');
-    node.textContent = baseName(name);
-    node.value = name;
-    node.selected = true;
-    const sep = demoOptionSep(select);
-    if ( sep )
-      select.insertBefore(node, sep);
-    else
-      select.appendChild(node);
-  }
-}
-
-function switchToFile(name)
-{ let options = Array.from(select_file.childNodes);
-
-  options.forEach((e) => {
-    e.selected = e.value == name;
-  });
-
-  if ( files.current != name )
-  { if ( files.current )
-      Persist.saveFile(files.current);
-    files.current = name;
-    if ( !files.list.includes(name) )
-      files.list.push(name);
-    Persist.loadFile(name);
-    updateDownload(name);
-  }
-}
-
-document.getElementById('create-button').onclick = e => {
-  e.preventDefault();
-  let input = document.getElementById("file-name");
-  let name  = input.value.trim();
-
-  if ( /^[a-zA-Z 0-9.-_]+$/.test(name) )
-  { if ( ! /\.pl$/.test(name) )
-      name += ".pl";
-
-    name = user_file(name);
-
-    addFileOption(name);
-    switchToFile(name);
-
-    editor.className = "";
-    document.getElementById('new-file').disabled = false;
-  } else
-  { alert("No or invalid file name!");
-  }
-};
-
-function selectedFile()
-{ opt = select_file.options[select_file.selectedIndex];
-  return opt.value;
-}
-
-document.getElementById("select-file").onchange = (e) => {
-  const opt = select_file.options[select_file.selectedIndex];
-
-  if ( opt.className == "url" )
-  { fetch(opt.value)
-    .then((res) => res.text())
-    .then((s) => {
-      const name = baseName(opt.value);
-      opt.className = "local";
-      opt.value = user_file(name);
-      opt.textContent = name;
-      Module.FS.writeFile(opt.value, s);
-      switchToFile(opt.value);
-    });
-  } else
-  { switchToFile(opt.value);
-  }
-}
-
-		 /*******************************
-		 *       UP AND DOWNLOAD        *
-		 *******************************/
-
-function updateDownload(name)
-{ const btn = document.querySelector("a.btn.download");
-  if ( btn )
-  { name = baseName(name);
-    btn.download = name;
-    btn.title = `Download ${name}`;
-    btn.href = "download";
-  }
-}
-
-document.querySelector("a.btn.download").addEventListener("click", (ev) => {
-  const text = editor.getValue();
-  const data = new Blob([text]);
-  const btn = ev.target;
-  btn.href = URL.createObjectURL(data);
-});
-
-function readAsText(file) {
-    return new Promise((resolve, reject) => {
-        const fr = new FileReader();
-        fr.onerror = reject;
-        fr.onload = () => {
-            resolve(fr.result);
-        }
-        fr.readAsText(file);
-    });
-}
-
-async function download_files(files)
-{ for(let i=0; i<files.length; i++)
-  { const file = files[i];
-    const content = await readAsText(file);
-    const name = user_file(baseName(file.name));
-    addFileOption(name);
-    switchToFile(name);
-    cm.setValue(content);
-    Persist.saveFile(name);
-  }
-}
-
-document.querySelector("a.btn.upload").addEventListener("click", (ev) => {
-  const exch = ev.target.closest("span.exch-files");
-  if ( exch.classList.contains("upload-armed") )
-  { const files = exch.querySelector('input.upload-file').files;
-    download_files(files).then(() => {
-      exch.classList.remove("upload-armed");
-    });
-  } else
-  { exch.classList.add("upload-armed")
-  }
-});
 
 		 /*******************************
 		 *        PERSIST FILES         *
@@ -938,7 +1050,7 @@ class Persist
 
     if ( content || name == default_file )
     { Module.FS.writeFile(name, content);
-      addFileOption(name);
+      source.addFileOption(name);
     } else
     { files.list = files.list.filter((n) => (n != name));
     }
@@ -955,7 +1067,7 @@ class Persist
 
     let current = files.current;
     files.current = null;
-    switchToFile(current || default_file);
+    source.switchToFile(current || default_file);
   }
 
   static loadFile(name)
@@ -1001,9 +1113,9 @@ class Persist
   }
 }
 
-window.onunload = (e) =>
-{ if ( Persist.autosave )
-  Persist.persist();
+window.onunload = (e) => {
+  if ( Persist.autosave )
+    Persist.persist();
 }
 
 		 /*******************************

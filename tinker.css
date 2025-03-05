@@ -59,16 +59,21 @@ div.github-buttons {
 }
 .scroll-start-at-top { flex: 1 1 0%; }
 
-.editor-container {
+.source-container {
     height: calc(100% - 2*var(--margin)); width: calc(50% - var(--margin));
 }
 
-#editor {
+form[name=source] {
     position: relative;
     height: 100%;
     display: flex;
     flex-direction: column;
 }
+
+.source-files button, .source-files select { height: 26px; }
+.source-files select option.url { color: blue; }
+.source-files .create-file { display: none; }
+form[name=source].create-file .source-files .create-file { display: inline; }
 
 .editor-wrapper {
     border: 1px solid black;
@@ -77,11 +82,7 @@ div.github-buttons {
     flex-grow: 1;
 }
 
-#editor-files button, #editor-files select { height: 26px; }
-
-#editor-files select option.url { color: blue; }
-
-#file {
+.editor-wrapper div[name=editor] {
     box-sizing: border-box;
     border: 0px;
     resize: none;
@@ -99,9 +100,13 @@ div.github-buttons {
     font-size: 130%;
 }
 
-.editor-buttons {
+.source-buttons {
     margin-top: var(--margin);
 }
+
+		 /*******************************
+		 *        PROLOG CONSOLE        *
+		 *******************************/
 
 #input {
     margin-top: 5px;
@@ -112,13 +117,12 @@ div.github-buttons {
 
 #more, #trace { margin-left: 3ex; }
 
-#input, #more, #trace, #abort, #create-file, #keyboard { display: none }
+#input, #more, #trace, #abort, #keyboard { display: none }
 .console.prompt      #input { display: flex }
 .console.more        #more  { display: inline-block }
 .console.trace       #trace { display: inline-block }
 .console.run:not(.key) #abort { display: block }
 .console.key         #keyboard { display : block }
-.create-file #create-file   { display: inline; }
 
 #input input { flex-grow: 1; margin: 0px 10px;}
 
