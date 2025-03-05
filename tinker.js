@@ -634,50 +634,68 @@ window.tty_size = tty_size;
  * ```
  */
 
-function add_query(query)
-{ const div1 = document.createElement("div");
-  const div2 = document.createElement("div");
-  const div3 = document.createElement("div");
-  const div4 = document.createElement("div");
-  const btns = document.createElement("span");
-  const edit = document.createElement("span");
-  const close = document.createElement("span");
-  const icon = document.createElement("span");
-  btns.className = "query-buttons";
-  edit.textContent = "\u270E";
-  edit.title = "Copy query to input";
-  close.textContent = "\u2715";
-  icon.className = "query-collapse";
-  icon.title = "Collapse/expand answer";
-  btns.appendChild(edit);
-  btns.appendChild(icon);
-  btns.appendChild(close);
+class TinkerQuery {
+  /**
+   * Create a `<div>` to interact with a new Prolog query
+   *
+   * @param {string} query is the Prolog query to run
+   * @param {HTMLElement} Element to which to add the new query
+   */
+  constructor(query, output) {
+    const div1 = document.createElement("div");
+    const div2 = document.createElement("div");
+    const div3 = document.createElement("div");
+    const div4 = document.createElement("div");
+    const btns = document.createElement("span");
+    const edit = document.createElement("span");
+    const close = document.createElement("span");
+    const icon = document.createElement("span");
+    btns.className = "query-buttons";
+    edit.textContent = "\u270E";
+    edit.title = "Copy query to input";
+    close.textContent = "\u2715";
+    icon.className = "query-collapse";
+    icon.title = "Collapse/expand answer";
+    btns.appendChild(edit);
+    btns.appendChild(icon);
+    btns.appendChild(close);
 
-  const prev = last_query();
-  if ( prev )
-    query_collapsed(prev, true);
+    const prev = last_query();
+    if ( prev )
+      prev.collapsed(true);
 
-  div1.className = "query-container";
-  div2.className = "query-header";
-  div3.className = "query-answers";
-  div4.className = "query-answer";
-  div1.appendChild(btns);
-  div1.appendChild(div2);
-  div1.appendChild(div3);
-  div3.appendChild(div4);
-  div2.textContent = `?- ${query}`;
-  answer = div4;
-  edit.addEventListener("click", () => {
-    const queryElem = input.querySelector("input");
-    queryElem.value = query;
-    queryElem.focus();
-  });
-  close.addEventListener("click", () => div1.remove(), false);
-  icon.addEventListener(
-    "click",
-    (e) => query_collapsed(e.target.closest("div.query-container")));
-  output.appendChild(div1);
-}
+    div1.className = "query-container";
+    div2.className = "query-header";
+    div3.className = "query-answers";
+    div4.className = "query-answer";
+    div1.appendChild(btns);
+    div1.appendChild(div2);
+    div1.appendChild(div3);
+    div3.appendChild(div4);
+    div2.textContent = `?- ${query}`;
+    this.answer = div4;
+    edit.addEventListener("click", () => {
+      const queryElem = input.querySelector("input");
+      queryElem.value = query;
+      queryElem.focus();
+    });
+    close.addEventListener("click", () => div1.remove(), false);
+    icon.addEventListener(
+      "click",
+      (e) => e.target.closest("div.query-container").collapsed());
+    output.appendChild(div1);
+  }
+
+  collapsed(how) {
+    if ( how === true )
+      this.classList.add("collapsed");
+    else if ( how === false )
+      this.classList.remove("collapsed");
+    else
+      this.classList.toggle("collapsed");
+  }
+
+} // end class TinkerQuery
 
 function last_query()
 { const q = output.lastChild;
@@ -685,16 +703,6 @@ function last_query()
     return q;
   return undefined;
 }
-
-function query_collapsed(query, how)
-{ if ( how === true )
-  query.classList.add("collapsed");
-  else if ( how === false )
-    query.classList.remove("collapsed");
-  else
-    query.classList.toggle("collapsed");
-}
-
 
 /** Add a new answer `<div>` after we asked for more answers.
  */
@@ -712,7 +720,7 @@ function next_answer()
  * @param {String} query is the query to run.
  */
 function query(query)
-{ add_query(query);
+{ new TinkerQuery(query, output);
 
   if ( waitfor && waitfor.yield == "query" )
   { set_state("run");
@@ -744,7 +752,7 @@ function submitQuery(queryElem)
   if ( queryElem.ex_target == "query" )
   { history.stack.push(query);
     history.current = null;
-    add_query(query);
+    new TinkerQuery(query, output);
   }
 
   set_state("run");
