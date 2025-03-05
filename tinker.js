@@ -606,6 +606,22 @@ function tty_size()
 }
 
 		 /*******************************
+		 *       CREATE ELEMENTS        *
+		 *******************************/
+
+function el(sel, ...content) {
+  const ar   = sel.split(".");
+  const elem = document.createElement(ar.shift());
+  elem.className = ar.join(" ");
+  for(let e of content) {
+    if ( typeof(e) === "string" )
+      e = document.createTextNode(e);
+    elem.appendChild(e);
+  }
+  return elem;
+}
+
+		 /*******************************
 		 *       OUTPUT STRUCTURE       *
 		 *******************************/
 
@@ -648,7 +664,7 @@ class TinkerQuery {
     const div2 = document.createElement("div");
     const div3 = document.createElement("div");
     const div4 = document.createElement("div");
-    const more = document.createElement("div");
+    const ctrl = document.createElement("div");
     const btns = document.createElement("span");
     const edit = document.createElement("span");
     const close = document.createElement("span");
@@ -663,7 +679,7 @@ class TinkerQuery {
     btns.appendChild(icon);
     btns.appendChild(close);
 
-    this.fillMore(more);
+    this.fillControl(ctrl);
 
     const prev = last_query();
     if ( prev )
@@ -676,7 +692,7 @@ class TinkerQuery {
     div1.appendChild(btns);
     div1.appendChild(div2);
     div1.appendChild(div3);
-    div1.appendChild(more);
+    div1.appendChild(ctrl);
     div3.appendChild(div4);
     div2.textContent = `?- ${query}`;
     edit.addEventListener("click", () => {
@@ -696,30 +712,34 @@ class TinkerQuery {
     output.appendChild(div1);
   }
 
+  fillControl(ctrl) {
+    ctrl.appendChild(this.createMore());
+
+  }
+
   /**
    * Fill the  input elements that  control user interaction  after an
    * answer has been found.
    */
-  fillMore(more) {
-    const self = this;
-    const next = document.createElement("button");
-    const stop = document.createElement("button");
+  createMore() {
+    const next = el("button.more-next", "Next");
+    const stop = el("button.more-cont", "Stop");
+    const elem = el("div.tinker-more", next, stop);
 
-    more.className = "tinker-more";
-    next.className = "more-next";
-    stop.className = "more-cont";
-    next.textContent = "Next";
-    stop.textContent = "Stop";
-    more.appendChild(next);
-    more.appendChild(stop);
+    function q(ev) {
+      return ev.target.closest(".query-container").data.query;
+    }
+
     next.addEventListener("click", (ev) => {
       ev.preventDefault();
-      self.reply_more("redo");
+      q(ev).reply_more("redo");
     });
     stop.addEventListener("click", (ev) => {
       ev.preventDefault();
-      self.reply_more("continue");
+      q(ev).reply_more("continue");
     });
+
+    return elem;
   }
 
   promptMore() {
