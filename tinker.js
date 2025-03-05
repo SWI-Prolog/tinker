@@ -689,8 +689,9 @@ class TinkerQuery {
       "click",
       (e) => e.target.closest("div.query-container").collapsed());
 
-    this.elem   = div1;
-    this.answer = div4;
+    this.elem = div1;
+    div1.data = { query: this };
+    answer = this.answer = div4;
 
     output.appendChild(div1);
   }
@@ -722,7 +723,7 @@ class TinkerQuery {
   }
 
   promptMore() {
-    this.elem.classList.add("more");
+    // this.elem.classList.add("more");
     const btn = this.elem.querySelector("button.more-next");
     btn.focus();
   }
@@ -732,11 +733,11 @@ class TinkerQuery {
    */
   collapsed(how) {
     if ( how === true )
-       this.classList.add("collapsed");
+       this.elem.classList.add("collapsed");
     else if ( how === false )
-      this.classList.remove("collapsed");
+      this.elem.classList.remove("collapsed");
     else
-      this.classList.toggle("collapsed");
+      this.elem.classList.toggle("collapsed");
   }
 
   /**
@@ -748,7 +749,7 @@ class TinkerQuery {
       const div4 = document.createElement("div");
       div4.className = "query-answer";
       answer.after(div4);
-      this.answer = div4;
+      answer = this.answer = div4;
       answer_ignore_nl = true; // suppress the first newline
     }
   }
@@ -762,7 +763,7 @@ class TinkerQuery {
       { case "redo":     print_output(";", "stdout"); this.next_answer(); break;
 	case "continue": print_output(".", "stdout"); answer_ignore_nl = true; break;
       }
-      next(waitfor.resume(action));
+      next(waitfor.resume(action), this);
     }
   }
 } // end class TinkerQuery
@@ -770,7 +771,7 @@ class TinkerQuery {
 function last_query()
 { const q = output.lastChild;
   if ( q && q.classList.contains("query-container") )
-    return q;
+    return q.data.query;
   return undefined;
 }
 
