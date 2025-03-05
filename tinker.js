@@ -39,6 +39,7 @@
 const user_dir      = "/prolog"
 const default_file  = `${user_dir}/scratch.pl`;
 
+let   cm;
 const terminal	    = document.getElementById('console');
 const output	    = document.getElementById('output');
 let   answer;
@@ -66,88 +67,111 @@ function is_user_file(file)
 }
 
 		 /*******************************
-		 *          CODEMIRROR          *
+		 *      THE SOURCE EDITOR       *
 		 *******************************/
 
-let CodeMirror;
-let cm;
+class TinkerEditor {
+  static cm_url = "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.9";
+  static cm_swi = "https://www.swi-prolog.org/download/codemirror";
+  CodeMirror;
 
-require.config(
-  { paths:
-    { "cm/lib/codemirror": "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.9/codemirror.min",
-      "cm/addon/edit/matchbrackets": "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.9/addon/edit/matchbrackets.min",
-      "cm/mode/prolog": "https://www.swi-prolog.org/download/codemirror/mode/prolog"
+  constructor(container, cont) {
+    const instance = this;
+
+    function loadCss(url)
+    { const link = document.createElement("link");
+      link.type = "text/css";
+      link.rel = "stylesheet";
+      link.href = url;
+      document.getElementsByTagName("head")[0].appendChild(link);
     }
-  });
 
-function initCodeMirror(cont)
-{ function createCM()
-  { cm = CodeMirror(document.getElementById("file"),
-                    { lineNumbers: true,
-		      matchBrackets: true,
-		      mode: "prolog",
-		      theme: "prolog",
-		      prologKeys: true
-                    });
-    window.cm = cm;
+    function cm_url(sub) {
+      return TinkerEditor.cm_url + sub;
+    }
+    function cm_swi(sub) {
+      return TinkerEditor.cm_swi + sub;
+    }
+
+    require.config({ paths: {
+      "cm/lib/codemirror":           cm_url("/codemirror.min"),
+      "cm/addon/edit/matchbrackets": cm_url("/addon/edit/matchbrackets.min"),
+      "cm/mode/prolog":              cm_swi("/mode/prolog")
+    }});
+
+    require(["cm/lib/codemirror",
+	     "cm/addon/edit/matchbrackets",
+	     "cm/mode/prolog/prolog",
+	     "cm/mode/prolog/prolog_keys",
+	    ], (cm) => {
+	      this.CodeMirror = cm;
+	      this.createCM(container);
+	      Persist.restore();
+	      addExamples().then(()=>{cont();});
+	    });
+
+    loadCss(cm_swi("/theme/prolog.css"));
   }
 
-  require(["cm/lib/codemirror",
-	   "cm/addon/edit/matchbrackets",
-	   "cm/mode/prolog/prolog",
-	   "cm/mode/prolog/prolog_keys",
-	  ], (cm) => {
-	    CodeMirror = cm;
-	    createCM();
-	    Persist.restore();
-	    addExamples().then(()=>{cont();});
-	  });
-}
-
-function loadCss(url)
-{ const link = document.createElement("link");
-  link.type = "text/css";
-  link.rel = "stylesheet";
-  link.href = url;
-  document.getElementsByTagName("head")[0].appendChild(link);
-}
-
-loadCss("https://eu.swi-prolog.org/download/codemirror/theme/prolog.css");
-
-/**
- * Go to a given 1-based line number
- *
- * @param {number} line
- * @param {Object} [options]
- * @param {number} [options.linepos] Go to a specific column
- */
-
-function cm_goto(cm, line, options)
-{ options  = options||{};
-  const ch = options.linepos||0;
-
-  function clearSearchMarkers(cm)
-  { if ( cm._searchMarkers !== undefined )
-    { for(let i=0; i<cm._searchMarkers.length; i++)
-      cm._searchMarkers[i].clear();
-      cm.off("cursorActivity", clearSearchMarkers);
-    }
-    cm._searchMarkers = [];
+  createCM(container) {
+    this.cm = this.CodeMirror(container,
+			      { lineNumbers: true,
+				matchBrackets: true,
+				mode: "prolog",
+				theme: "prolog",
+				prologKeys: true
+			      });
   }
 
-  clearSearchMarkers(cm);
-  line = line-1;
+  /**
+   * @param {string} new content for the editor
+   */
+  setValue(content) {
+    return this.cm.setValue(content);
+  }
 
-  cm.setCursor({line:line,ch:ch});
-  cm._searchMarkers.push(
-    cm.markText({line:line, ch:0},
-		{line:line, ch:cm.getLine(line).length},
-		{ className:"CodeMirror-search-match",
-		  clearOnEnter: true,
-		  clearWhenEmpty: true,
-		  title: "Target line"
-		}));
-  cm.on("cursorActivity", clearSearchMarkers);
+  /**
+   * @return {string} current content of the editor
+   */
+  getValue() {
+    return this.cm.getValue();
+  }
+
+  /**
+   * Go to a given 1-based line number
+   *
+   * @param {number} line
+   * @param {Object} [options]
+   * @param {number} [options.linepos] Go to a specific column
+   */
+
+  goto(line, options) {
+    options  = options||{};
+    const ch = options.linepos||0;
+
+    function clearSearchMarkers(cm)
+    { if ( this.cm._searchMarkers !== undefined )
+      { for(let i=0; i<this.cm._searchMarkers.length; i++)
+	this.cm._searchMarkers[i].clear();
+	this.cm.off("cursorActivity", clearSearchMarkers);
+      }
+      this.cm._searchMarkers = [];
+    }
+
+    clearSearchMarkers(this.cm);
+    line = line-1;
+
+    this.cm.setCursor({line:line,ch:ch});
+    this.cm._searchMarkers.push(
+      this.cm.markText({line:line, ch:0},
+		  {line:line, ch:this.cm.getLine(line).length},
+		  { className:"CodeMirror-search-match",
+		    clearOnEnter: true,
+		    clearWhenEmpty: true,
+		    title: "Target line"
+		  }));
+    this.cm.on("cursorActivity", clearSearchMarkers);
+  }
 }
 
 
@@ -657,7 +681,9 @@ SWIPL(options).then(async (module) =>
       await Prolog.consult("tinker.pl", {module:"system"});
       Prolog.query("tinker:tinker_init(Dir)", {Dir:user_dir}).once();
       Prolog.call("version");
-      initCodeMirror(toplevel);
+      cm = new TinkerEditor(document.getElementById("file"),
+			    toplevel);
+      window.editor = cm;
     });
 
 async function addExamples()
@@ -848,7 +874,7 @@ function updateDownload(name)
 }
 
 document.querySelector("a.btn.download").addEventListener("click", (ev) => {
-  const text = cm.getValue();
+  const text = editor.getValue();
   const data = new Blob([text]);
   const btn = ev.target;
   btn.href = URL.createObjectURL(data);
