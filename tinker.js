@@ -620,7 +620,7 @@ window.tty_size = tty_size;
  *
  * ```
  * <div class="query-container">
- *   <div class="query-header">?- betweenl(1,3,X).</div
+ *   <div class="query-header">?- between(1,3,X).</div
  *   <div class="query-answers">
  *     <div class="query-answer">
  *       <span class="stdout">X = 1;</span>
@@ -635,6 +635,8 @@ window.tty_size = tty_size;
  */
 
 class TinkerQuery {
+  elem;				// div.query-container
+  answer;			// div.query-answer
   /**
    * Create a `<div>` to interact with a new Prolog query
    *
@@ -646,6 +648,7 @@ class TinkerQuery {
     const div2 = document.createElement("div");
     const div3 = document.createElement("div");
     const div4 = document.createElement("div");
+    const more = document.createElement("div");
     const btns = document.createElement("span");
     const edit = document.createElement("span");
     const close = document.createElement("span");
@@ -660,6 +663,8 @@ class TinkerQuery {
     btns.appendChild(icon);
     btns.appendChild(close);
 
+    this.fillMore(more);
+
     const prev = last_query();
     if ( prev )
       prev.collapsed(true);
@@ -671,9 +676,9 @@ class TinkerQuery {
     div1.appendChild(btns);
     div1.appendChild(div2);
     div1.appendChild(div3);
+    div1.appendChild(more);
     div3.appendChild(div4);
     div2.textContent = `?- ${query}`;
-    this.answer = div4;
     edit.addEventListener("click", () => {
       const queryElem = input.querySelector("input");
       queryElem.value = query;
@@ -683,18 +688,83 @@ class TinkerQuery {
     icon.addEventListener(
       "click",
       (e) => e.target.closest("div.query-container").collapsed());
+
+    this.elem   = div1;
+    this.answer = div4;
+
     output.appendChild(div1);
   }
 
+  /**
+   * Fill the  input elements that  control user interaction  after an
+   * answer has been found.
+   */
+  fillMore(more) {
+    const self = this;
+    const next = document.createElement("button");
+    const stop = document.createElement("button");
+
+    more.className = "tinker-more";
+    next.className = "more-next";
+    stop.className = "more-cont";
+    next.textContent = "Next";
+    stop.textContent = "Stop";
+    more.appendChild(next);
+    more.appendChild(stop);
+    next.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      self.reply_more("redo");
+    });
+    stop.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      self.reply_more("continue");
+    });
+  }
+
+  promptMore() {
+    this.elem.classList.add("more");
+    const btn = this.elem.querySelector("button.more-next");
+    btn.focus();
+  }
+
+  /**
+   * Set/clear.toggle the collapsed state of the query
+   */
   collapsed(how) {
     if ( how === true )
-      this.classList.add("collapsed");
+       this.classList.add("collapsed");
     else if ( how === false )
       this.classList.remove("collapsed");
     else
       this.classList.toggle("collapsed");
   }
 
+  /**
+   * Add a `div.query-answer` element to capture the output and
+   * solution of the next answer.
+   */
+  next_answer() {
+    if ( this.answer ) {
+      const div4 = document.createElement("div");
+      div4.className = "query-answer";
+      answer.after(div4);
+      this.answer = div4;
+      answer_ignore_nl = true; // suppress the first newline
+    }
+  }
+
+  /**
+   * Handle the "Next"/"Stop" buttons
+   */
+  reply_more(action) {
+    if ( waitfor && waitfor.yield == "more" )
+    { switch(action)
+      { case "redo":     print_output(";", "stdout"); this.next_answer(); break;
+	case "continue": print_output(".", "stdout"); answer_ignore_nl = true; break;
+      }
+      next(waitfor.resume(action));
+    }
+  }
 } // end class TinkerQuery
 
 function last_query()
@@ -704,27 +774,15 @@ function last_query()
   return undefined;
 }
 
-/** Add a new answer `<div>` after we asked for more answers.
- */
-function next_answer()
-{ if ( answer )
-  { const div4 = document.createElement("div");
-    div4.className = "query-answer";
-    answer.after(div4);
-    answer = div4;
-    answer_ignore_nl = true; // suppress the first newline
-  }
-}
-
 /** Run a query.  Used for e.g., consulting the current file.
  * @param {String} query is the query to run.
  */
 function query(query)
-{ new TinkerQuery(query, output);
+{ const q = new TinkerQuery(query, output);
 
   if ( waitfor && waitfor.yield == "query" )
   { set_state("run");
-    next(waitfor.resume(query));
+    next(waitfor.resume(query), q);
   } else
   { Prolog.call(query);
   }
@@ -738,6 +796,7 @@ function submitQuery(queryElem)
 { const input = queryElem.querySelector("input");
   let query = input.value;
   input.value = '';
+  let q;
 
   if ( queryElem.ex_target == "query" ||
        queryElem.ex_target == "term" )
@@ -752,11 +811,11 @@ function submitQuery(queryElem)
   if ( queryElem.ex_target == "query" )
   { history.stack.push(query);
     history.current = null;
-    new TinkerQuery(query, output);
+    q = new TinkerQuery(query, output);
   }
 
   set_state("run");
-  next(waitfor.resume(query));
+  next(waitfor.resume(query), q);
   return true;
 }
 
@@ -865,17 +924,6 @@ abort.addEventListener('submit', (e) => {
   }
 }, false);
 
-// Next/Stop
-
-function reply_more(action)
-{ if ( waitfor && waitfor.yield == "more" )
-  { switch(action)
-    { case "redo":     print_output(";", "stdout"); next_answer(); break;
-      case "continue": print_output(".", "stdout"); answer_ignore_nl = true; break;
-    }
-    next(waitfor.resume(action));
-  }
-}
 
 		 /*******************************
 		 *            TRACER            *
@@ -951,7 +999,7 @@ function set_state(state)
 { terminal.className = "console " + state;
 }
 
-function next(rc)
+function next(rc, query)
 { waitfor = null;
 
   if ( rc.yield !== undefined )
@@ -966,7 +1014,7 @@ function next(rc)
 
     switch(rc.yield)
     { case "beat":
-        return setTimeout(() => next(waitfor.resume("true")), 0);
+      return setTimeout(() => next(waitfor.resume("true"), query), 0);
       case "query":
         answer = undefined;
         /*FALLTHROUGH*/
@@ -977,7 +1025,7 @@ function next(rc)
         break;
       case "more":
         set_state("more");
-        document.getElementById("more.next").focus();
+        query.promptMore();
         break;
       case "trace":
       { trace_action("print", waitfor.trace_event);

@@ -115,11 +115,11 @@ form[name=source].create-file .source-files .create-file { display: inline; }
 }
 
 
-#more, #trace { margin-left: 3ex; }
+.tinker-more, #trace { margin-left: 3ex; }
 
-#input, #more, #trace, #abort, #keyboard { display: none }
+#input, .tinker-more, #trace, #abort, #keyboard { display: none }
 .console.prompt      #input { display: flex }
-.console.more        #more  { display: inline-block }
+.console.more        .tinker-more  { display: inline-block }
 .console.trace       #trace { display: inline-block }
 .console.run:not(.key) #abort { display: block }
 .console.key         #keyboard { display : block }
