@@ -726,7 +726,8 @@ class TinkerQuery {
 
   __fillControl(ctrl) {
     this.input = new TinkerInput();
-    ctrl.appendChild(this.createMore());
+    ctrl.appendChild(this.__createMore());
+    ctrl.appendChild(this.__createTrace());
     ctrl.appendChild(this.input.elem);
   }
 
@@ -734,7 +735,7 @@ class TinkerQuery {
    * Fill the  input elements that  control user interaction  after an
    * answer has been found.
    */
-  createMore() {
+  __createMore() {
     const self = this;
     const next = el("button.more-next", "Next");
     const stop = el("button.more-cont", "Stop");
@@ -756,6 +757,43 @@ class TinkerQuery {
     // this.elem.classList.add("more");
     this.state = "more";
     const btn = this.elem.querySelector("button.more-next");
+    btn.focus();
+  }
+
+  __createTrace() {
+    const self = this;
+    function button(action, title, label) {
+      const btn = el(`button.${action}`, label);
+      btn.title = title;
+      btn.addEventListener("click", () => {
+	this.reply_trace(action);
+      });
+      return btn;
+    }
+
+    const trace = el("div.query-trace",
+		     button("creep",   "Creep (c,Space,Enter)", "↳"),
+		     button("skip",    "Skip (s)",              "⏭"),
+		     button("retry",   "Retry (r)",             "↻"),
+		     button("nodebug", "Nodebug (n)",           "▶"),
+		     button("abort",   "Abort (a)",             "⏹"));
+
+    trace.addEventListener("keyup", (ev) => {
+      if ( ev.defaultPrevented ) return;
+      const action = trace_shortcuts[ev.key];
+      if ( action )
+      { ev.preventDefault();
+	ev.stopPropagation();
+	self.reply_trace(action);
+      }
+    });
+
+    return trace;
+  }
+
+  promptTrace() {
+    this.state = "trace";
+    const btn = this.elem.querySelector("button.creep");
     btn.focus();
   }
 
@@ -863,6 +901,47 @@ class TinkerQuery {
       next(waitfor.resume(action), this);
     }
   }
+
+  reply_trace(action) {
+    if ( waitfor && waitfor.yield == "trace" ) {
+      print_output(` [${action}]`, "stderr", {color: "#888"});
+      Prolog.call("nl(user_error)", {nodebug:true});
+
+      switch(action)
+      { case "goals":
+	case "listing":
+	case "help":
+	{ this.trace_action(action, waitfor.trace_event);
+	  break;
+	}
+	default:
+	{ this.state = "run";
+	  next(waitfor.resume(action), this);
+	}
+      }
+    }
+  }
+
+  /**
+   * Call tinker.trace_action(action, msg)
+   */
+  trace_action(action, msg) {
+    const prolog = Prolog;
+
+    return prolog.with_frame(() => {
+      const av = prolog.new_term_ref(2);
+
+      prolog.put_chars(av+0, action, prolog.PL_ATOM);
+      prolog.bindings.PL_put_term(av+1, msg);
+      const flags = prolog.PL_Q_NODEBUG;
+      const pred  = prolog.predicate("tinker:trace_action/2");
+      const qid   = prolog.bindings.PL_open_query(0, flags, pred, av);
+      const rc    = prolog.bindings.PL_next_solution(qid);
+      prolog.bindings.PL_close_query(qid);
+      return rc;
+    });
+  }
+
 
   /**
    * The query we are running has been completed.
@@ -1090,43 +1169,6 @@ abort.addEventListener('submit', (e) => {
 		 *            TRACER            *
 		 *******************************/
 
-function reply_trace(action)
-{ if ( waitfor && waitfor.yield == "trace" )
-  { print_output(` [${action}]`, "stderr", {color: "#888"});
-    Prolog.call("nl(user_error)", {nodebug:true});
-
-    switch(action)
-    { case "goals":
-      case "listing":
-      case "help":
-      { trace_action(action, waitfor.trace_event);
-	break;
-      }
-      default:
-      { set_state("run");
-	next(waitfor.resume(action));
-      }
-    }
-  }
-}
-
-function trace_action(action, msg)
-{ const prolog = Prolog;
-
-  return prolog.with_frame(() =>
-  { const av = prolog.new_term_ref(2);
-
-    prolog.put_chars(av+0, action, prolog.PL_ATOM);
-    prolog.bindings.PL_put_term(av+1, msg);
-    const flags = prolog.PL_Q_NODEBUG;
-    const pred  = prolog.predicate("tinker:trace_action/2");
-    const qid   = prolog.bindings.PL_open_query(0, flags, pred, av);
-    const rc    = prolog.bindings.PL_next_solution(qid);
-    prolog.bindings.PL_close_query(qid);
-    return rc;
-  });
-}
-
 const trace_shortcuts = {
   " ":     "creep",
   "Enter": "creep",
@@ -1141,16 +1183,6 @@ const trace_shortcuts = {
   "u":	   "up",
   "?":	   "help"
 };
-
-trace.addEventListener("keyup", (ev) => {
-  if ( ev.defaultPrevented ) return;
-  const action = trace_shortcuts[ev.key];
-  if ( action )
-  { ev.preventDefault();
-    ev.stopPropagation();
-    reply_trace(action);
-  }
-});
 
 		 /*******************************
 		 *       TOPLEVEL STATES        *
@@ -1194,13 +1226,13 @@ function next(rc, query)
         break;
       case "trace":
       { trace_action("print", waitfor.trace_event);
-        set_state("trace");
-        document.getElementById("trace.creep").focus();
+	query.promptTrace();
         break;
       }
       case "builtin":
-      rc.resume((rc)=>next(rc, query));
+      { rc.resume((rc)=>next(rc, query));
         break;
+      }
     }
   } else {
     if ( rc.error ) {
