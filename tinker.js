@@ -714,7 +714,7 @@ class TinkerQuery {
 
   fillControl(ctrl) {
     ctrl.appendChild(this.createMore());
-
+    ctrl.appendChild(new TinkerQuery().elem);
   }
 
   /**
@@ -821,121 +821,165 @@ function query(query)
 		 *        ENTER A QUERY         *
 		 *******************************/
 
-function submitQuery(queryElem)
-{ const input = queryElem.querySelector("input");
-  let query = input.value;
-  input.value = '';
-  let q;
+/**
+ * Handle term  input for  the toplevel.  This  deals with  entering a
+ * query, read/1 and friends and reading a line of input.
+ */
 
-  if ( queryElem.ex_target == "query" ||
-       queryElem.ex_target == "term" )
-  { if ( query.trim() == "" )
-    { return false;
-    } else
-    { if ( ! /\.\s*/.test(query) )
-        query += ".";
-    }
+class TinkerInput {
+  elem;
+  target;			// "query", "term", or "line"
+
+  constructor() {
+    const input = el("input.tinker-read");
+    this.elem = el("div.input",
+		   el("span.prompt", "?- "),
+		   input);
+    input.type = "text";
+    input.autocapitalize = "none";
+    input.autocomplete = "off"
+    this.armInput();
+    this.armCompletion();
   }
 
-  if ( queryElem.ex_target == "query" )
-  { history.stack.push(query);
-    history.current = null;
-    q = new TinkerQuery(query, output);
-  }
+  /**
+   * Resume Prolog using the entered item as a string
+   */
+  submit() {
+    const input = this.elem.querySelector("input");
+    let query = input.value;
+    input.value = '';
+    let q;
 
-  set_state("run");
-  next(waitfor.resume(query), q);
-  return true;
-}
-
-function focusInput(queryElem, why)
-{ const input  = queryElem.querySelector("input");
-  const prompt = queryElem.querySelector("span.prompt");
-  switch(why)
-  { case "query":
-    { prompt.textContent = "?-";
-      break;
-    }
-    default:
-    { const s = Prolog.prompt_string(0)||"|: ";
-      prompt.textContent = s;
-    }
-  }
-  input.placeholder = `Please enter a ${why}`;
-  input.focus();
-  queryElem.ex_target = why;
-}
-
-input.addEventListener("keydown", (event) =>
-{ if ( event.key == "Tab" )
-  { const elem   = input.querySelector("input");
-    const caret  = elem.selectionStart;
-    const all    = elem.value;
-    const before = all.slice(0,caret);
-    const after  = caret == all.length ? "" : all.slice(caret-all.length);
-
-    function commonPrefix(words)
-    { let i = 0;
-
-      while(words[0][i] && words.every(w => w[i] === words[0][i]))
-	i++;
-      return words[0].slice(0, i);
-    }
-
-    function setCompletion(to, del)
-    { elem.value = ( before.slice(0, before.length-del.length) +
-		     to +
-		     after );
-    }
-
-    const res = Prolog.query(
-      "tinker:complete_input(Before,After,Delete,Completions)",
-      {Before:before, After:after}).once();
-
-    if ( res.Completions.length == 1 )
-    { setCompletion(res.Completions[0], res.Delete.v);
-    } else if ( res.Completions.length > 1 )
-    { const common = commonPrefix(res.Completions);
-      if ( common.length > 0 )
-	setCompletion(common, res.Delete.v);
-    }
-
-    event.preventDefault();
-  }
-});
-
-input.addEventListener("keyup", (event) =>
-{ if ( event.defaultPrevented ) return;
-
-  switch(event.key)
-  { case "ArrowUp":
-      if ( history.current == null )
-      {	history.saved = event.target.value;
-	history.current = history.stack.length;
+    if ( this.target == "query" ||
+	 this.target == "term" ) {
+      if ( query.trim() == "" ) {
+	return false;
+      } else {
+	if ( ! /\.\s*/.test(query) )
+          query += ".";
       }
-      if ( --history.current >= 0 )
-      { event.target.value = history.stack[history.current];
+
+      if ( this.target == "query" ) {
+	history.stack.push(query);
+	history.current = null;
+	q = new TinkerQuery(query, output);
       }
-      break;
-    case "ArrowDown":
-      if ( history.current != null )
-      { if ( ++history.current < history.stack.length )
-	{ event.target.value = history.stack[history.current];
-	} else if ( history.current == history.stack.length )
-	{ event.target.value = history.saved;
+
+      set_state("run");
+      next(waitfor.resume(query), q);
+      return true;
+    }
+  }
+
+  /**
+   * focus the input element
+   * @param {string} target is one of "query", "term" or "line"
+   */
+  focus(target) {
+    const input  = this.elem.querySelector("input");
+    const prompt = this.elem.querySelector("span.prompt");
+    switch(target)
+    { case "query":
+      { prompt.textContent = "?- ";
+	break;
+      }
+      default:
+      { const s = Prolog.prompt_string(0)||"|: ";
+	prompt.textContent = s;
+      }
+    }
+    input.placeholder = `Please enter a ${target}`;
+    input.focus();
+    this.target = target;
+  }
+
+  /**
+   * Handle allow  keys for  history and Enter  to submit  the current
+   * input.
+   */
+  armInput() {
+    const input = this.elem.querySelector("input");
+    input.addEventListener("keyup", (event) => {
+      if ( event.defaultPrevented ) return;
+
+      switch(event.key)
+      { case "ArrowUp":
+	{ if ( history.current == null ) {
+	    history.saved = input.value;
+	    history.current = history.stack.length;
+	  }
+	  if ( --history.current >= 0 ) {
+	    input.value = history.stack[history.current];
+	  }
+	  break;
+	}
+	case "ArrowDown":
+	{ if ( history.current != null ) {
+	    if ( ++history.current < history.stack.length ) {
+	      input.value = history.stack[history.current];
+	    } else if ( history.current == history.stack.length ) {
+	      input.value = history.saved;
+	    }
+	  }
+	  break;
+	}
+	case "Enter":
+	{ this.submit();
+	  break;
+	}
+	default:
+	return;
+      }
+
+      event.preventDefault();
+    }, true);
+  }
+
+  /**
+   * Enable Tab-based completion on the element
+   * @todo show possible completions in case there are multiple.
+   */
+  armCompletion() {
+    const input = this.elem.querySelector("input");
+    input.addEventListener("keydown", (event) => {
+      if ( event.key == "Tab" ) {
+	event.preventDefault();
+	const caret  = input.selectionStart;
+	const all    = input.value;
+	const before = all.slice(0,caret);
+	const after  = caret == all.length ? "" : all.slice(caret-all.length);
+
+	function commonPrefix(words)
+	{ let i = 0;
+
+	  while(words[0][i] && words.every(w => w[i] === words[0][i]))
+	    i++;
+	  return words[0].slice(0, i);
+	}
+
+	function setCompletion(to, del)
+	{ input.value = ( before.slice(0, before.length-del.length) +
+			  to +
+			  after );
+	}
+
+	const res = Prolog.query(
+	  "tinker:complete_input(Before,After,Delete,Completions)",
+	  {Before:before, After:after}).once();
+
+	if ( res.Completions.length == 1 ) {
+	  setCompletion(res.Completions[0], res.Delete.v);
+	} else if ( res.Completions.length > 1 ) {
+	  const common = commonPrefix(res.Completions);
+	  if ( common.length > 0 )
+	    setCompletion(common, res.Delete.v);
 	}
       }
-      break;
-    case "Enter":
-    { submitQuery(input);
-      break;
-    }
-    default:
-      return;
+    });
   }
 
-  event.preventDefault();
-}, true);
+} // end class ThinkerInput
 
 
 		 /*******************************
