@@ -108,7 +108,7 @@ form[name=source].create-file .source-files .create-file { display: inline; }
 		 *        PROLOG CONSOLE        *
 		 *******************************/
 
-#input {
+.tinker-input {
     margin-top: 5px;
     box-sizing: border-box;
     width: 100%;
@@ -117,14 +117,16 @@ form[name=source].create-file .source-files .create-file { display: inline; }
 
 .tinker-more, #trace { margin-left: 3ex; }
 
-#input, .tinker-more, #trace, #abort, #keyboard { display: none }
-.console.prompt      #input { display: flex }
-.console.more        .tinker-more  { display: inline-block }
-.console.trace       #trace { display: inline-block }
-.console.run:not(.key) #abort { display: block }
-.console.key         #keyboard { display : block }
+.tinker-input, .tinker-more, #trace, #abort, #keyboard { display: none }
+.tinker-query.read          .query-header { display: none }
+.tinker-query.read          .tinker-input { display: flex }
+.tinker-query.prompt        .tinker-input { display: flex }
+.tinker-query.more          .tinker-more  { display: inline-block }
+.tinker-query.trace         #trace        { display: inline-block }
+.tinker-query.run:not(.key) #abort        { display: block }
+.tinker-query.key           #keyboard     { display : block }
 
-#input input { flex-grow: 1; margin: 0px 10px;}
+.tinker-input input { flex-grow: 1; margin: 0px 10px;}
 
 #keyboard:focus { outline: 0px; }
 #keyboard > span { color: #888; font-style: italic; font-size: 90%; }
@@ -145,14 +147,14 @@ div.query-header, span.prompt { font-weight: bold; }
 .query-header { margin-top: 5px; padding: 3px 0px; display: block; background-color: #add8e6;}
 .query-answer:nth-child(even) { background-color: #eee; }
 
-.query-container, .query-answer { position: relative; }
+.tinker-query, .query-answer { position: relative; }
 span.query-buttons { position: absolute; right: 5px; top: 1px; padding: 0px; margin: 0px;
 		     cursor: pointer; color: #666}
 span.query-buttons > span { margin-left: 0.5ex; border: 1px;}
 span.query-buttons > span:hover { color: black; border: 1px solid black;}
-.query-container.collapsed > .query-answers { display: none; }
-.query-container span.query-collapse:before { content: "\1401" }
-.query-container.collapsed span.query-collapse:before { content: "\1405" }
+.tinker-query.collapsed > .query-answers { display: none; }
+.tinker-query span.query-collapse:before { content: "\1401" }
+.tinker-query.collapsed span.query-collapse:before { content: "\1405" }
 span.query-collapse { font-size: 90%; }
 
 span.exch-files {

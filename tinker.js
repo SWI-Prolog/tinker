@@ -650,19 +650,24 @@ window.tty_size = tty_size;
  * ```
  */
 
+const state_classes = [
+  "run", "more", "trace", "read", "prompt", "query", "term", "line"
+];
+
 class TinkerQuery {
   elem;				// div.query-container
   answer;			// div.query-answer
   input;			// TinkerInput
+  #state;			// "run", "more", "trace",
+				// "prompt query", "prompt term", "prompt line"
   /**
    * Create a `<div>` to interact with a new Prolog query
    *
    * @param {string} query is the Prolog query to run
-   * @param {HTMLElement} Element to which to add the new query
    */
-  constructor(query, output) {
+  constructor(query) {
     const div1 = document.createElement("div");
-    const div2 = document.createElement("div");
+    const hdr  = el("div.query-header");
     const div3 = document.createElement("div");
     const div4 = document.createElement("div");
     const ctrl = document.createElement("div");
@@ -686,17 +691,17 @@ class TinkerQuery {
     if ( prev )
       prev.collapsed(true);
 
-    div1.className = "query-container";
-    div2.className = "query-header";
+    div1.className = "tinker-query";
     div3.className = "query-answers";
     div4.className = "query-answer";
-    div1.appendChild(btns);
-    div1.appendChild(div2);
+    hdr.appendChild(btns);
+    div1.appendChild(hdr);
     div1.appendChild(div3);
     div1.appendChild(ctrl);
     div3.appendChild(div4);
-    div2.textContent = `?- ${query}`;
-    edit.addEventListener("click", () => {
+    if ( query )
+      hdr.textContent = `?- ${query}`;
+    edit.addEventListener("click", () => { // TODO: Create new query
       const queryElem = input.querySelector("input");
       queryElem.value = query;
       queryElem.focus();
@@ -709,13 +714,11 @@ class TinkerQuery {
     this.elem = div1;
     div1.data = { query: this };
     answer = this.answer = div4;
-
-    output.appendChild(div1);
   }
 
   fillControl(ctrl) {
     ctrl.appendChild(this.createMore());
-    ctrl.appendChild(new TinkerQuery().elem);
+    ctrl.appendChild(new TinkerInput().elem);
   }
 
   /**
@@ -759,6 +762,24 @@ class TinkerQuery {
       this.elem.classList.remove("collapsed");
     else
       this.elem.classList.toggle("collapsed");
+  }
+
+  set state(state) {
+    this.#state = state;
+    this.elem.classList.remove(state_classes);
+    this.elem.classList.add(...state.split(" "));
+  }
+
+  hasState(state) {
+    return this.elem.classList.contains(state);
+  }
+
+  /**
+   * Run a query
+   */
+
+  run() {
+    this.state = "read query";
   }
 
   /**
@@ -808,7 +829,9 @@ function last_query()
  * @param {String} query is the query to run.
  */
 function query(query)
-{ const q = new TinkerQuery(query, output);
+{ const q = new TinkerQuery(query);
+
+  output.appendChild(q.elem);
 
   if ( waitfor && waitfor.yield == "query" )
   { set_state("run");
@@ -832,8 +855,8 @@ class TinkerInput {
   target;			// "query", "term", or "line"
 
   constructor() {
-    const input = el("input.tinker-read");
-    this.elem = el("div.input",
+    const input = el("input");
+    this.elem = el("div.tinker-input",
 		   el("span.prompt", "?- "),
 		   input);
     input.type = "text";
@@ -864,7 +887,8 @@ class TinkerInput {
       if ( this.target == "query" ) {
 	history.stack.push(query);
 	history.current = null;
-	q = new TinkerQuery(query, output);
+	q = new TinkerQuery(query);
+	output.appendChild(q.elem);
       }
 
       set_state("run");
@@ -980,7 +1004,7 @@ class TinkerInput {
     });
   }
 
-} // end class ThinkerInput
+} // end class TinkerInput
 
 
 		 /*******************************
@@ -1121,13 +1145,10 @@ function next(rc, query)
   }
 }
 
-function toplevel()
-{ let rc = Prolog.call("wasm_query_loop",
-		       { async:true,
-			 debugger:true
-		       });
-
-  next(rc);
+function toplevel() {
+  const q = new TinkerQuery();
+  output.appendChild(q.elem);
+  q.run()
 }
 
 		 /*******************************
