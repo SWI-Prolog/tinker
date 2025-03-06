@@ -735,21 +735,18 @@ class TinkerQuery {
    * answer has been found.
    */
   createMore() {
+    const self = this;
     const next = el("button.more-next", "Next");
     const stop = el("button.more-cont", "Stop");
     const elem = el("div.tinker-more", next, stop);
 
-    function q(ev) {
-      return ev.target.closest(".query-container").data.query;
-    }
-
     next.addEventListener("click", (ev) => {
       ev.preventDefault();
-      q(ev).reply_more("redo");
+      self.reply_more("redo");
     });
     stop.addEventListener("click", (ev) => {
       ev.preventDefault();
-      q(ev).reply_more("continue");
+      self.reply_more("continue");
     });
 
     return elem;
@@ -757,6 +754,7 @@ class TinkerQuery {
 
   promptMore() {
     // this.elem.classList.add("more");
+    this.state = "more";
     const btn = this.elem.querySelector("button.more-next");
     btn.focus();
   }
@@ -1192,7 +1190,6 @@ function next(rc, query)
         query.input.focus(rc.yield);
         break;
       case "more":
-        set_state("more");
         query.promptMore();
         break;
       case "trace":
