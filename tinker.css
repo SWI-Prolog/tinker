@@ -117,13 +117,15 @@ form[name=source].create-file .source-files .create-file { display: inline; }
 
 .tinker-more, .tinker-trace { margin-left: 3ex; }
 
-.tinker-input, .tinker-more, .tinker-trace, #abort, #keyboard { display: none }
+.tinker-input, .tinker-more, .tinker-trace,
+.tinker-abort, #keyboard { display: none }
+
 .tinker-query.read          .query-header { display: none }
 .tinker-query.read          .tinker-input { display: flex }
 .tinker-query.prompt        .tinker-input { display: flex }
 .tinker-query.more          .tinker-more  { display: inline-block }
 .tinker-query.trace         .tinker-trace { display: inline-block }
-.tinker-query.run:not(.key) #abort        { display: block }
+.tinker-query.run:not(.key) .tinker-abort { display: block }
 .tinker-query.key           #keyboard     { display : block }
 
 .tinker-input input { flex-grow: 1; margin: 0px 10px;}

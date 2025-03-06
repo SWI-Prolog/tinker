@@ -724,9 +724,28 @@ class TinkerQuery {
 
   __fillControl(ctrl) {
     this.input = new TinkerInput();
+    ctrl.appendChild(this.__createAbort());
     ctrl.appendChild(this.__createMore());
     ctrl.appendChild(this.__createTrace());
     ctrl.appendChild(this.input.elem);
+  }
+
+  __createAbort() {
+    const btn = el("button", "Abort");
+    const abort = el("div.tinker-abort", btn);
+
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      if ( waitfor && waitfor.abort )
+      { console.log("aborting", waitfor);
+	waitfor.abort();
+      } else
+      { console.log("Requesting abort");
+	abort_request = true;
+      }
+    });
+
+    return abort;
   }
 
   /**
@@ -1146,23 +1165,6 @@ class TinkerInput {
   }
 } // end class TinkerInput
 
-
-		 /*******************************
-		 *     CONTROLLING A QUERY      *
-		 *******************************/
-
-abort.addEventListener('submit', (e) => {
-  e.preventDefault();
-  if ( waitfor && waitfor.abort )
-  { console.log("aborting", waitfor);
-    waitfor.abort();
-  } else
-  { console.log("Requesting abort");
-    abort_request = true;
-  }
-}, false);
-
-
 		 /*******************************
 		 *            TRACER            *
 		 *******************************/
@@ -1205,7 +1207,7 @@ function next(rc, query)
 
     if ( abort_request )
     { abort_request = false;
-      return next(waitfor.resume("wasm_abort"));
+      return next(waitfor.resume("wasm_abort"), query);
     }
 
     switch(rc.yield)
