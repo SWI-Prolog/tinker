@@ -886,13 +886,10 @@ function last_query()
  * @param {String} query is the query to run.
  */
 function query(query)
-{ const q = new TinkerQuery(query);
+{ const open = last_query();
 
-  output.appendChild(q.elem);
-
-  if ( waitfor && waitfor.yield == "query" )
-  { set_state("run");
-    next(waitfor.resume(query), q);
+  if ( open && open.input.target == "query" ) {
+    open.handleUserInput(query);
   } else
   { Prolog.call(query);
   }
