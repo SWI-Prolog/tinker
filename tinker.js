@@ -652,29 +652,22 @@ class TinkerQuery {
    * @param {string} query is the Prolog query to run
    */
   constructor(query) {
-    const div1 = document.createElement("div");
-    this.elem = div1;
     const hdr  = el("div.query-header",
 		    el("span.query-prompt", "?-"),
 		    el("span.query-goal"));
-    const div3 = document.createElement("div");
-    const div4 = document.createElement("div");
-    const ctrl = document.createElement("div");
+    const ans  = el("div.query-answer");
+    const ansl = el("div.query-answers", ans);
+    const ctrl = el("div");
+
+    this.elem = el("div.tinker-query",
+		   hdr, ansl, ctrl);
+    this.elem.data = { query: this };
 
     this.__fillHeader(hdr);
     this.__fillControl(ctrl);
 
-    div1.className = "tinker-query";
-    div3.className = "query-answers";
-    div4.className = "query-answer";
-    div1.appendChild(hdr);
-    div1.appendChild(div3);
-    div1.appendChild(ctrl);
-    div3.appendChild(div4);
     this.query = query;
-
-    div1.data = { query: this };
-    answer = this.answer = div4;
+    answer = this.answer = ans;
   }
 
   set query(query) {
