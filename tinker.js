@@ -653,6 +653,7 @@ window.tty_size = tty_size;
 class TinkerQuery {
   elem;				// div.query-container
   answer;			// div.query-answer
+  input;			// TinkerInput
   /**
    * Create a `<div>` to interact with a new Prolog query
    *
@@ -1094,7 +1095,7 @@ function next(rc, query)
       case "term":
       case "line":
         set_state("prompt "+rc.yield);
-        focusInput(input, rc.yield);
+        query.input.focus(rc.yield);
         break;
       case "more":
         set_state("more");
