@@ -48,7 +48,6 @@ const terminal	    = document.getElementById('console');
 const output	    = document.getElementById('output');
 let   answer;
 let   answer_ignore_nl = false;
-const input	    = document.getElementById('input');
 const more	    = document.getElementById('more');
 const trace	    = document.getElementById('trace');
 const abort	    = document.getElementById('abort');
@@ -717,8 +716,9 @@ class TinkerQuery {
   }
 
   fillControl(ctrl) {
+    this.input = new TinkerInput();
     ctrl.appendChild(this.createMore());
-    ctrl.appendChild(new TinkerInput().elem);
+    ctrl.appendChild(this.input.elem);
   }
 
   /**
@@ -766,8 +766,12 @@ class TinkerQuery {
 
   set state(state) {
     this.#state = state;
-    this.elem.classList.remove(state_classes);
+    this.elem.classList.remove(...state_classes);
     this.elem.classList.add(...state.split(" "));
+  }
+
+  get state() {
+    return this.#state;
   }
 
   hasState(state) {
@@ -775,11 +779,26 @@ class TinkerQuery {
   }
 
   /**
-   * Run a query
+   * Read a query.  This is done to start with an empty query.
    */
 
-  run() {
+  read() {
     this.state = "read query";
+    this.input.focus("query");
+  }
+
+  handleUserInput(line) {
+    switch(this.state)
+    { case "read query":
+      { this.elem.querySelector(".query-header").textContent = `?- ${line}`;
+	const jqline = new Prolog.Compound(":", "user", line);
+	const jcall  = new Prolog.Compound("wasm_query", jqline);
+	const jgoal  = new Prolog.Compound(":", "wasm", jcall);
+	const rc = Prolog.call(jgoal, { async:true, debugger:true });
+	this.state = "run";
+	next(rc, this);
+      }
+    }
   }
 
   /**
@@ -859,11 +878,16 @@ class TinkerInput {
     this.elem = el("div.tinker-input",
 		   el("span.prompt", "?- "),
 		   input);
+    this.elem.data = { instance: this };
     input.type = "text";
     input.autocapitalize = "none";
     input.autocomplete = "off"
     this.armInput();
     this.armCompletion();
+  }
+
+  query() {
+    return this.elem.closest(".tinker-query").data.query;
   }
 
   /**
@@ -884,6 +908,10 @@ class TinkerInput {
           query += ".";
       }
 
+      const q = this.query();
+      q.handleUserInput(query);
+
+/*
       if ( this.target == "query" ) {
 	history.stack.push(query);
 	history.current = null;
@@ -894,6 +922,7 @@ class TinkerInput {
       set_state("run");
       next(waitfor.resume(query), q);
       return true;
+*/
     }
   }
 
@@ -1097,6 +1126,11 @@ function set_state(state)
 { terminal.className = "console " + state;
 }
 
+/**
+ * Handle the return of Prolog.call().  This is a success, failure,
+ * error or yield code.
+ */
+
 function next(rc, query)
 { waitfor = null;
 
@@ -1112,7 +1146,7 @@ function next(rc, query)
 
     switch(rc.yield)
     { case "beat":
-      return setTimeout(() => next(waitfor.resume("true"), query), 0);
+        return setTimeout(() => next(waitfor.resume("true"), query), 0);
       case "query":
         answer = undefined;
         /*FALLTHROUGH*/
@@ -1148,7 +1182,7 @@ function next(rc, query)
 function toplevel() {
   const q = new TinkerQuery();
   output.appendChild(q.elem);
-  q.run()
+  q.read()
 }
 
 		 /*******************************
