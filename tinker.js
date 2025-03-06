@@ -48,8 +48,6 @@ const terminal	    = document.getElementById('console');
 const output	    = document.getElementById('output');
 let   answer;
 let   answer_ignore_nl = false;
-const more	    = document.getElementById('more');
-const trace	    = document.getElementById('trace');
 const abort	    = document.getElementById('abort');
 const keyboard	    = document.getElementById('keyboard');
 let   waitfor	    = null;
@@ -771,7 +769,7 @@ class TinkerQuery {
       return btn;
     }
 
-    const trace = el("div.query-trace",
+    const trace = el("div.tinker-trace",
 		     button("creep",   "Creep (c,Space,Enter)", "↳"),
 		     button("skip",    "Skip (s)",              "⏭"),
 		     button("retry",   "Retry (r)",             "↻"),
@@ -1225,7 +1223,7 @@ function next(rc, query)
         query.promptMore();
         break;
       case "trace":
-      { trace_action("print", waitfor.trace_event);
+      { query.trace_action("print", waitfor.trace_event);
 	query.promptTrace();
         break;
       }
