@@ -48,8 +48,6 @@ const terminal	    = document.getElementById('console');
 const output	    = document.getElementById('output');
 let   answer;
 let   answer_ignore_nl = false;
-const abort	    = document.getElementById('abort');
-const keyboard	    = document.getElementById('keyboard');
 let   waitfor	    = null;
 let   abort_request = false;
 let   history       = { stack: [], current: null };
@@ -559,7 +557,6 @@ async function tty_link(ev)
   // Use default action
 }
 
-
 function getPromiseFromEvent(item, event) {
   return new Prolog.Promise((resolve) => {
     const listener = (ev) => {
@@ -568,14 +565,6 @@ function getPromiseFromEvent(item, event) {
     }
     item.addEventListener(event, listener);
   })
-}
-
-async function get_single_char()
-{ terminal.classList.add("key");
-  keyboard.focus();
-  const ev = await getPromiseFromEvent(keyboard, "keyup");
-  terminal.classList.remove("key");
-  return ev.keyCode;
 }
 
 function getCharSize(element)
@@ -727,6 +716,7 @@ class TinkerQuery {
     ctrl.appendChild(this.__createAbort());
     ctrl.appendChild(this.__createMore());
     ctrl.appendChild(this.__createTrace());
+    ctrl.appendChild(this.__createKbd());
     ctrl.appendChild(this.input.elem);
   }
 
@@ -814,6 +804,26 @@ class TinkerQuery {
     btn.focus();
   }
 
+  __createKbd() {
+    const div = el("div.tinker-keyboard",
+		   "⌨️",
+		   el("span", "waiting for a key"));
+    div.tabindex = 0;
+    return div;
+  }
+
+  /**
+   * Get a single character
+   */
+  async get_single_char() {
+    const kbd = this.elem.querySelector("div.tinker-keyboard");
+    this.elem.classList.add("key");
+    kbd.focus();
+    const ev = await getPromiseFromEvent(kbd, "keyup");
+    this.elem.classList.remove("key");
+    return ev.keyCode;
+  }
+
   /**
    * Set/clear.toggle the collapsed state of the query
    */
@@ -867,19 +877,23 @@ class TinkerQuery {
     this.input.focus("query");
   }
 
+  run(line) {
+    this.query = line;
+    const jqline = new Prolog.Compound(":", "user", line);
+    const jcall  = new Prolog.Compound("wasm_query", jqline);
+    const jgoal  = new Prolog.Compound(":", "wasm", jcall);
+    const rc = Prolog.call(jgoal, { async:true, debugger:true });
+    this.state = "run";
+    const prev = this.previous();
+    if ( prev )
+      prev.collapsed(true);
+    next(rc, this);
+  }
+
   handleUserInput(line) {
     switch(this.state)
     { case "read query":
-      { this.query = line;
-	const jqline = new Prolog.Compound(":", "user", line);
-	const jcall  = new Prolog.Compound("wasm_query", jqline);
-	const jgoal  = new Prolog.Compound(":", "wasm", jcall);
-	const rc = Prolog.call(jgoal, { async:true, debugger:true });
-	this.state = "run";
-	const prev = this.previous();
-	if ( prev )
-	  prev.collapsed(true);
-	next(rc, this);
+      { this.run(line);
       }
     }
   }
@@ -983,7 +997,7 @@ function query(query)
 { const open = last_query();
 
   if ( open && open.input.target == "query" ) {
-    open.handleUserInput(query);
+    open.run(query);
   } else
   { Prolog.call(query);
   }
