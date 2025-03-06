@@ -144,6 +144,7 @@ form[name=source].create-file .source-files .create-file { display: inline; }
 div.write { display: contents; }
 
 div.query-header, span.prompt { font-weight: bold; }
+div.query-header span.query-prompt { margin-right: 1ex; }
 .query-header { margin-top: 5px; padding: 3px 0px; display: block; background-color: #add8e6;}
 .query-answer:nth-child(even) { background-color: #eee; }
 

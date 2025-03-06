@@ -668,11 +668,42 @@ class TinkerQuery {
     const div1 = document.createElement("div");
     this.elem = div1;
     const hdr  = el("div.query-header",
+		    el("span.query-prompt", "?-"),
 		    el("span.query-goal"));
     const div3 = document.createElement("div");
     const div4 = document.createElement("div");
     const ctrl = document.createElement("div");
 
+    this.__fillHeader(hdr);
+    this.__fillControl(ctrl);
+
+    div1.className = "tinker-query";
+    div3.className = "query-answers";
+    div4.className = "query-answer";
+    div1.appendChild(hdr);
+    div1.appendChild(div3);
+    div1.appendChild(ctrl);
+    div3.appendChild(div4);
+    this.query = query;
+
+    div1.data = { query: this };
+    answer = this.answer = div4;
+  }
+
+  set query(query) {
+    const span = this.elem.querySelector("span.query-goal");
+    if ( query )
+      span.textContent = query;
+    else
+      span.textContent = "";
+  }
+  get query() {
+    const span = this.elem.querySelector("span.query-goal");
+    return span.textContent;
+  }
+
+  __fillHeader(hdr) {
+    const self = this;
     const edit  = el("span", "\u270E");
     const close = el("span", "\u2715");
     const icon  = el("span.query-collapse");
@@ -680,45 +711,20 @@ class TinkerQuery {
     icon.title  = "Collapse/expand answer";
     const btns  = el("span.query-buttons",
 		     edit, icon, close);
-
-    this.fillControl(ctrl);
-
-    const prev = last_query();
-    if ( prev )
-      prev.collapsed(true);
-
-    div1.className = "tinker-query";
-    div3.className = "query-answers";
-    div4.className = "query-answer";
     hdr.appendChild(btns);
-    div1.appendChild(hdr);
-    div1.appendChild(div3);
-    div1.appendChild(ctrl);
-    div3.appendChild(div4);
-    this.setQuery(query);
-    edit.addEventListener("click", () => { // TODO: Create new query
-      const queryElem = input.querySelector("input");
-      queryElem.value = query;
-      queryElem.focus();
+
+    close.addEventListener("click", () => self.close(), false);
+    edit.addEventListener("click", () => {
+      const open = last_query();
+      if ( open && open.input.target == "query" ) {
+	open.input.value = self.query;
+	open.input.focus("query");
+      }
     });
-    close.addEventListener("click", () => div1.remove(), false);
-    icon.addEventListener(
-      "click",
-      (e) => e.target.closest("div.query-container").collapsed());
-
-    div1.data = { query: this };
-    answer = this.answer = div4;
+    icon.addEventListener("click", () => self.collapsed());
   }
 
-  setQuery(query) {
-    const span = this.elem.querySelector("span.query-goal");
-    if ( query )
-      span.textContent = `?- ${query}`;
-    else
-      span.textContent = "";
-  }
-
-  fillControl(ctrl) {
+  __fillControl(ctrl) {
     this.input = new TinkerInput();
     ctrl.appendChild(this.createMore());
     ctrl.appendChild(this.input.elem);
@@ -781,6 +787,24 @@ class TinkerQuery {
     return this.elem.classList.contains(state);
   }
 
+  close() {			// TODO: What if not completed?
+    this.elem.remove();
+  }
+
+  /**
+   * Find the  query before this  one.  Currently, we do  not consider
+   * the state of the query.
+   * @return {TinkerQuery}
+   */
+  previous() {
+    let node = this.elem.previousElementSibling;
+    while(node) {
+      if ( node.classList.contains("tinker-query") )
+	return node.data.query;
+      node = node.previousElementSibling;
+    }
+  }
+
   /**
    * Read a query.  This is done to start with an empty query.
    */
@@ -793,12 +817,15 @@ class TinkerQuery {
   handleUserInput(line) {
     switch(this.state)
     { case "read query":
-      { this.setQuery(line);
+      { this.query = line;
 	const jqline = new Prolog.Compound(":", "user", line);
 	const jcall  = new Prolog.Compound("wasm_query", jqline);
 	const jgoal  = new Prolog.Compound(":", "wasm", jcall);
 	const rc = Prolog.call(jgoal, { async:true, debugger:true });
 	this.state = "run";
+	const prev = this.previous();
+	if ( prev )
+	  prev.collapsed(true);
 	next(rc, this);
       }
     }
@@ -839,6 +866,9 @@ class TinkerQuery {
     }
   }
 
+  /**
+   * The query we are running has been completed.
+   */
   completed() {
     this.state = "complete";
     toplevel();			// TODO: make method of query
@@ -847,7 +877,7 @@ class TinkerQuery {
 
 function last_query()
 { const q = output.lastChild;
-  if ( q && q.classList.contains("query-container") )
+  if ( q && q.classList.contains("tinker-query") )
     return q.data.query;
   return undefined;
 }
@@ -894,6 +924,16 @@ class TinkerInput {
     this.armCompletion();
   }
 
+  get value() {
+    const input = this.elem.querySelector("input");
+    return input.value;
+  }
+
+  set value(val) {
+    const input = this.elem.querySelector("input");
+    return input.value = val;
+  }
+
   query() {
     return this.elem.closest(".tinker-query").data.query;
   }
@@ -916,21 +956,13 @@ class TinkerInput {
           query += ".";
       }
 
-      const q = this.query();
-      q.handleUserInput(query);
-
-/*
       if ( this.target == "query" ) {
 	history.stack.push(query);
 	history.current = null;
-	q = new TinkerQuery(query);
-	output.appendChild(q.elem);
       }
 
-      set_state("run");
-      next(waitfor.resume(query), q);
-      return true;
-*/
+      const q = this.query();
+      q.handleUserInput(query);
     }
   }
 
@@ -1040,7 +1072,6 @@ class TinkerInput {
       }
     });
   }
-
 } // end class TinkerInput
 
 
