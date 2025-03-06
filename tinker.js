@@ -666,7 +666,9 @@ class TinkerQuery {
    */
   constructor(query) {
     const div1 = document.createElement("div");
-    const hdr  = el("div.query-header");
+    this.elem = div1;
+    const hdr  = el("div.query-header",
+		    el("span.query-goal"));
     const div3 = document.createElement("div");
     const div4 = document.createElement("div");
     const ctrl = document.createElement("div");
@@ -698,8 +700,7 @@ class TinkerQuery {
     div1.appendChild(div3);
     div1.appendChild(ctrl);
     div3.appendChild(div4);
-    if ( query )
-      hdr.textContent = `?- ${query}`;
+    this.setQuery(query);
     edit.addEventListener("click", () => { // TODO: Create new query
       const queryElem = input.querySelector("input");
       queryElem.value = query;
@@ -710,9 +711,16 @@ class TinkerQuery {
       "click",
       (e) => e.target.closest("div.query-container").collapsed());
 
-    this.elem = div1;
     div1.data = { query: this };
     answer = this.answer = div4;
+  }
+
+  setQuery(query) {
+    const span = this.elem.querySelector("span.query-goal");
+    if ( query )
+      span.textContent = `?- ${query}`;
+    else
+      span.textContent = "";
   }
 
   fillControl(ctrl) {
@@ -790,7 +798,7 @@ class TinkerQuery {
   handleUserInput(line) {
     switch(this.state)
     { case "read query":
-      { this.elem.querySelector(".query-header").textContent = `?- ${line}`;
+      { this.setQuery(line);
 	const jqline = new Prolog.Compound(":", "user", line);
 	const jcall  = new Prolog.Compound("wasm_query", jqline);
 	const jgoal  = new Prolog.Compound(":", "wasm", jcall);
@@ -834,6 +842,11 @@ class TinkerQuery {
       }
       next(waitfor.resume(action), this);
     }
+  }
+
+  completed() {
+    this.state = "complete";
+    toplevel();			// TODO: make method of query
   }
 } // end class TinkerQuery
 
@@ -1166,16 +1179,18 @@ function next(rc, query)
         break;
       }
       case "builtin":
-        rc.resume((rc)=>next(rc));
+      rc.resume((rc)=>next(rc, query));
         break;
     }
-  } else if ( rc.error )
-  { if ( rc.message == "Execution Aborted" )
-    { Prolog.call("print_message(informational, unwind(abort))");
-    } else
-    { console.log("Unhandled exception; restarting", rc);
+  } else {
+    if ( rc.error ) {
+      if ( rc.message == "Execution Aborted" )
+      { Prolog.call("print_message(informational, unwind(abort))");
+      } else
+      { console.log("Unhandled exception; restarting", rc);
+      }
     }
-    toplevel();
+    query.completed();
   }
 }
 
