@@ -46,7 +46,6 @@ let   persist;			// Persistence management
 let   tconsole;			// left pane console area
 let   source;			// right pane (editor + file actions)
 
-let   answer_ignore_nl = false;
 let   waitfor	    = null;
 let   abort_request = false;
 
@@ -665,7 +664,7 @@ class TinkerConsole {
   }
 
   /**
-   * Clear the console.
+   * Clear the console.  Currently leaves the current query alone.
    */
   clear() {
     const rem = [];
@@ -686,10 +685,10 @@ class TinkerConsole {
    * color, bold, underline or link.
    */
   print(line, cls, sgr) {
-    if ( line.trim() == "" &&
-	 answer_ignore_nl &&
-	 this.current_query && this.current_query.answer ) {
-      answer_ignore_nl = false;
+    let q;
+    if ( line.trim() == "" && (q=this.current_query) &&
+	 q.answer_ignore_nl && q.answer ) {
+      q.answer_ignore_nl = false;
       return;
     }
 
@@ -1061,7 +1060,7 @@ class TinkerQuery {
       ans.className = "query-answer";
       this.answer.after(ans);
       this.answer = ans;
-      answer_ignore_nl = true; // suppress the first newline
+      this.answer_ignore_nl = true; // suppress the first newline
     }
   }
 
@@ -1079,7 +1078,7 @@ class TinkerQuery {
 	}
 	case "continue":
 	{ con.print(".", "stdout");
-	  answer_ignore_nl = true;
+	  this.answer_ignore_nl = true;
 	  break;
 	}
       }
