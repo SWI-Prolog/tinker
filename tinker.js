@@ -41,7 +41,6 @@ const default_file  = `${user_dir}/scratch.pl`;
 let   files	    = { current: default_file,
 			list: [default_file]
 		      };
-let   history       = { stack: [], current: null };
 
 let   persist;			// Persistence management
 let   tconsole;			// left pane console area
@@ -596,6 +595,7 @@ window.current_answer = () => answer;
 
 class TinkerConsole {
   output;			// element to write in
+  history;			// Query history
 
   constructor(elem) {
     this.elem = elem;
@@ -607,7 +607,47 @@ class TinkerConsole {
     elem.parentNode.insertBefore(wrapper, elem);
     wrapper.appendChild(elem);
     elem.appendChild(this.output);
+    this.#initHistory();
   }
+
+  #initHistory() {
+    this.history = {
+      stack: [],
+      current: null
+    };
+    persist.load("history", this.history, ["stack"]);
+  }
+
+  pushHistory(line) {
+    if ( this.history.stack.length == 0 ||
+	 this.history.stack[this.history.stack.length-1] != line )
+      this.history.stack.push(line);
+    this.history.current = null;
+  }
+
+  upHistory(line) {
+    if ( this.history.current == null ) {
+      this.history.saved = line;
+      this.history.current = this.history.stack.length;
+    }
+    if ( --this.history.current >= 0 ) {
+      return this.history.stack[this.history.current];
+    }
+  }
+
+  downHistory() {
+    if ( this.history.current != null ) {
+      if ( this.history.current+1 < this.history.stack.length ) {
+	this.history.current++;
+	return this.history.stack[this.history.current];
+      } else if ( this.history.saved !== undefined ) {
+	const val = this.history.saved;
+	this.history.saved = undefined;
+	return val;
+      }
+    }
+  }
+
 
   /**
    * Add a  new query.  This  presents a  prompt.  After the  query is
@@ -1126,8 +1166,8 @@ class TinkerInput {
       }
 
       if ( this.target == "query" ) {
-	history.stack.push(query);
-	history.current = null;
+	const con = TinkerConsole.findConsole(this.elem);
+	con.pushHistory(query);
       }
     }
     const q = this.query();
@@ -1167,23 +1207,17 @@ class TinkerInput {
 
       switch(event.key)
       { case "ArrowUp":
-	{ if ( history.current == null ) {
-	    history.saved = input.value;
-	    history.current = history.stack.length;
-	  }
-	  if ( --history.current >= 0 ) {
-	    input.value = history.stack[history.current];
-	  }
-	  break;
-	}
 	case "ArrowDown":
-	{ if ( history.current != null ) {
-	    if ( ++history.current < history.stack.length ) {
-	      input.value = history.stack[history.current];
-	    } else if ( history.current == history.stack.length ) {
-	      input.value = history.saved;
-	    }
-	  }
+	{ const con = TinkerConsole.findConsole(this.elem);
+	  let val;
+
+	  if( event.key === "ArrowUp" )
+	    val = con.upHistory(input.value);
+	  else
+	    val = con.downHistory(input.value);
+
+	  if ( val !== undefined )
+	    input.value = val;
 	  break;
 	}
 	case "Enter":
@@ -1320,14 +1354,39 @@ function next(rc, query)
 		 *******************************/
 
 class Persist {
+  map;				// key -> object
+
   constructor() {
     const self = this;
     this.autosave = true;
+    this.map = {};
 
     window.addEventListener("visibilitychange", () => {
       if ( document.hidden && this.autosave )
 	self.persist();
     });
+  }
+
+  /**
+   * Load  `name` from  localStorage and  use its  attributes to  fill
+   * `into`.  The object is registered such that it is saved back into
+   * the localStorage when the page is left.
+   *
+   * @param {string} name the localStorage key
+   * @param {object} into JavaScript object filled
+   */
+  load(name, into, keys) {
+    this.map[name] = { data: into,
+		       keys: keys
+		     };
+    const item = localStorage.getItem(name);
+    if ( item ) {
+      const obj = JSON.parse(item);
+      for(let k of keys) {
+	if ( obj[k] !== undefined )
+	  into[k] = obj[k];
+      }
+    }
   }
 
   persistsFile(name)
@@ -1383,8 +1442,19 @@ class Persist {
     }
   }
 
+  persistRegistered() {
+    for(let k of Object.keys(this.map)) {
+      const data = this.map[k].data;
+      const save = {};
+      for( let key of this.map[k].keys ) {
+	save[key] = data[key];
+      }
+      localStorage.setItem(k, JSON.stringify(save));
+    }
+  }
+
   persist()
-  { localStorage.setItem("history", JSON.stringify(history));
+  { this.persistRegistered();
     const l = files.list.filter((n) => is_user_file(n)||n == default_file);
     const save =
 	  { list: l,
@@ -1396,16 +1466,8 @@ class Persist {
     save.list.forEach((f) => this.persistsFile(f));
   }
 
-  restoreHistory()
-  { const h = localStorage.getItem("history");
-
-    if ( h )
-      history = JSON.parse(h);
-  }
-
   restore()
   { this.restoreFiles();
-    this.restoreHistory();
   }
 }
 
