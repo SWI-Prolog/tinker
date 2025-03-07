@@ -93,7 +93,6 @@ class TinkerSource {
 
   afterEditor() {
     this.addExamples();
-    toplevel();
   }
 
   setValue(source)    { this.editor.setValue(source); }
@@ -601,6 +600,9 @@ class TinkerConsole {
   output;			// element to write in
 
   constructor(elem) {
+    this.elem = elem;
+    elem.data = {instance: this};
+    elem.classList.add("tinker-console");
     this.output = el("div.output");
     const wrapper = el("div.scroll-wrapper",
 		       el("span.scroll-start-at-top"));
@@ -608,8 +610,28 @@ class TinkerConsole {
     wrapper.appendChild(elem);
     elem.appendChild(this.output);
   }
-}
 
+  /**
+   * Add a  new query.  This  presents a  prompt.  After the  query is
+   * entered, it will be executed in the context of this query.
+   */
+
+  addQuery() {
+    const q = new TinkerQuery();
+    this.output.appendChild(q.elem);
+    q.read()
+  }
+
+  /**
+   * Find the console instance from a nested element
+   * @return {TinkerConsole}
+   */
+  static findConsole(from) {
+    const elem = from.closest(".tinker-console");
+    if ( elem && elem.data && elem.data.instance )
+      return elem.data.instance;
+  }
+}
 
 		 /*******************************
 		 *         TINKER QUERY         *
@@ -970,13 +992,17 @@ class TinkerQuery {
     });
   }
 
+  addNextQuery() {
+    const console = TinkerConsole.findConsole(this.elem);
+    console.addQuery();
+  }
 
   /**
    * The query we are running has been completed.
    */
   completed() {
     this.state = "complete";
-    toplevel();			// TODO: make method of query
+    this.addNextQuery();
   }
 
   __getCharSize(element) {
@@ -1272,12 +1298,6 @@ function next(rc, query)
   }
 }
 
-function toplevel() {
-  const q = new TinkerQuery();
-  output.appendChild(q.elem);
-  q.read()
-}
-
 		 /*******************************
 		 *         START PROLOG         *
 		 *******************************/
@@ -1303,6 +1323,7 @@ SWIPL(options).then(async (module) => {
   await Prolog.consult("tinker.pl", {module:"system"});
   Prolog.query("tinker:tinker_init(Dir)", {Dir:user_dir}).once();
   Prolog.call("version");
+  console.addQuery();
   window.source = source = new TinkerSource(
     document.querySelector("form[name=source]"));
 });
