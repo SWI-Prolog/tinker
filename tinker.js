@@ -567,30 +567,6 @@ function getPromiseFromEvent(item, event) {
   })
 }
 
-function getCharSize(element)
-{ if ( !element.char_size )
-  { let temp = document.createElement("span");
-    temp.className = "stdout";
-    temp.textContent = "test";
-    element.appendChild(temp);
-    const rect = temp.getBoundingClientRect();
-    element.char_size = { h: rect.height,
-			  w: rect.width/4
-			};
-    element.removeChild(temp);
-  }
-  return element.char_size;
-}
-
-function tty_size()
-{ const tty = document.querySelector("div.console");
-  const wrapper = tty.closest("div.scroll-wrapper");
-  const charsz = getCharSize(output);
-  return [ Math.floor(wrapper.clientHeight/charsz.h),
-	   Math.floor(wrapper.clientWidth/charsz.w)
-	 ];
-}
-
 		 /*******************************
 		 *       CREATE ELEMENTS        *
 		 *******************************/
@@ -616,7 +592,6 @@ function el(sel, ...content) {
  */
 
 window.current_answer = () => answer;
-window.tty_size = tty_size;
 
 /** Add a structure for a query.  The structure is
  *
@@ -975,6 +950,30 @@ class TinkerQuery {
   completed() {
     this.state = "complete";
     toplevel();			// TODO: make method of query
+  }
+
+  __getCharSize(element) {
+    if ( !element.char_size )
+    { let temp = document.createElement("span");
+      temp.className = "stdout";
+      temp.textContent = "test";
+      element.appendChild(temp);
+      const rect = temp.getBoundingClientRect();
+      element.char_size = { h: rect.height,
+			    w: rect.width/4
+			  };
+      element.removeChild(temp);
+    }
+    return element.char_size;
+  }
+
+  tty_size() {
+    const tty = this.elem.closest("div.console");
+    const wrapper = tty.closest("div.scroll-wrapper");
+    const charsz = this.__getCharSize(output);
+    return [ Math.floor(wrapper.clientHeight/charsz.h),
+	     Math.floor(wrapper.clientWidth/charsz.w)
+	   ];
   }
 } // end class TinkerQuery
 

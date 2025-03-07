@@ -228,7 +228,8 @@ system:get_single_char(Code) :-
     await(Promise, Code).
 
 system:tty_size(Rows, Columns) :-
-    [Rows,Columns] := tty_size().
+    tinker_query(Q),
+    [Rows,Columns] := Q.tty_size().
 
 reading_tty :-
     current_input(Input),
