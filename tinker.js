@@ -41,7 +41,7 @@ const default_file  = `${user_dir}/scratch.pl`;
 let   files	    = { current: default_file,
 			list: [default_file]
 		      };
-let   console;			// left pane console area
+let   tconsole;			// left pane console area
 let   source;			// right pane (editor + file actions)
 let   cm;			// The editor (TODO: remove)
 
@@ -940,6 +940,13 @@ class TinkerQuery {
     switch(this.state)
     { case "read query":
       { this.run(line);
+	break;
+      }
+      case "prompt term":
+      case "prompt line":
+      { this.state = "run";
+	next(waitfor.resume(line), this);
+	break;
       }
     }
   }
@@ -1020,8 +1027,8 @@ class TinkerQuery {
   }
 
   addNextQuery() {
-    const console = TinkerConsole.findConsole(this.elem);
-    console.addQuery();
+    const tconsole = TinkerConsole.findConsole(this.elem);
+    tconsole.addQuery();
   }
 
   /**
@@ -1033,9 +1040,9 @@ class TinkerQuery {
   }
 
   tty_size() {
-    const console = TinkerConsole.findConsole(this.elem);
-    if ( console )
-      return console.tty_size();
+    const tconsole = TinkerConsole.findConsole(this.elem);
+    if ( tconsole )
+      return tconsole.tty_size();
   }
 } // end class TinkerQuery
 
@@ -1106,7 +1113,6 @@ class TinkerInput {
     const input = this.elem.querySelector("input");
     let query = input.value;
     input.value = '';
-    let q;
 
     if ( this.target == "query" ||
 	 this.target == "term" ) {
@@ -1121,10 +1127,9 @@ class TinkerInput {
 	history.stack.push(query);
 	history.current = null;
       }
-
-      const q = this.query();
-      q.handleUserInput(query);
     }
+    const q = this.query();
+    q.handleUserInput(query);
   }
 
   /**
@@ -1321,8 +1326,8 @@ var options = {
   on_output: print_output
 };
 
-console = new TinkerConsole(document.querySelector("div.console"));
-output  = console.output;	// TEMP
+tconsole = new TinkerConsole(document.querySelector("div.console"));
+output   = tconsole.output;	// TEMP
 
 SWIPL(options).then(async (module) => {
   Module = module;
@@ -1332,7 +1337,7 @@ SWIPL(options).then(async (module) => {
   await Prolog.consult("tinker.pl", {module:"system"});
   Prolog.query("tinker:tinker_init(Dir)", {Dir:user_dir}).once();
   Prolog.call("version");
-  console.addQuery();
+  tconsole.addQuery();
   window.source = source = new TinkerSource(
     document.querySelector("form[name=source]"));
 });
