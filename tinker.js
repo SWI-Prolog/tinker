@@ -622,6 +622,33 @@ class TinkerConsole {
     q.read()
   }
 
+
+  __getCharSize(element) {
+    if ( !element.char_size )
+    { let temp = document.createElement("span");
+      temp.className = "stdout";
+      temp.textContent = "test";
+      element.appendChild(temp);
+      const rect = temp.getBoundingClientRect();
+      element.char_size = { h: rect.height,
+			    w: rect.width/4
+			  };
+      element.removeChild(temp);
+    }
+    return element.char_size;
+  }
+
+  /**
+   * @return {Array} holding [rows, columns]
+   */
+  tty_size() {
+    const wrapper = this.elem.closest("div.scroll-wrapper");
+    const charsz = this.__getCharSize(this.output);
+    return [ Math.floor(wrapper.clientHeight/charsz.h),
+	     Math.floor(wrapper.clientWidth/charsz.w)
+	   ];
+  }
+
   /**
    * Find the console instance from a nested element
    * @return {TinkerConsole}
@@ -1005,28 +1032,10 @@ class TinkerQuery {
     this.addNextQuery();
   }
 
-  __getCharSize(element) {
-    if ( !element.char_size )
-    { let temp = document.createElement("span");
-      temp.className = "stdout";
-      temp.textContent = "test";
-      element.appendChild(temp);
-      const rect = temp.getBoundingClientRect();
-      element.char_size = { h: rect.height,
-			    w: rect.width/4
-			  };
-      element.removeChild(temp);
-    }
-    return element.char_size;
-  }
-
   tty_size() {
-    const tty = this.elem.closest("div.console");
-    const wrapper = tty.closest("div.scroll-wrapper");
-    const charsz = this.__getCharSize(output);
-    return [ Math.floor(wrapper.clientHeight/charsz.h),
-	     Math.floor(wrapper.clientWidth/charsz.w)
-	   ];
+    const console = TinkerConsole.findConsole(this.elem);
+    if ( console )
+      return console.tty_size();
   }
 } // end class TinkerQuery
 
