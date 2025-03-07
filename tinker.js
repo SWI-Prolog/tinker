@@ -46,7 +46,6 @@ let   persist;			// Persistence management
 let   tconsole;			// left pane console area
 let   source;			// right pane (editor + file actions)
 
-let   output;			// console output div
 let   answer;
 let   answer_ignore_nl = false;
 let   waitfor	    = null;
@@ -601,6 +600,18 @@ class TinkerConsole {
     }
   }
 
+  /**
+   * @return {TinkerQuery} Last query displayed on the console.
+   * `undefined` if there is no last query
+   */
+  lastQuery() {
+    const q = this.output.lastChild;
+    while(q) {
+      if ( q.classList.contains("tinker-query") && q.data )
+	return q.data.query;
+      q = q.previousElementSibling;
+    }
+  }
 
   /**
    * Add a  new query.  This  presents a  prompt.  After the  query is
@@ -667,7 +678,7 @@ class TinkerConsole {
     }
     node.classList.add(cls);
     node.textContent = line;
-    (answer||output).appendChild(node);
+    (answer||this.output).appendChild(node);
   }
 
   /**
@@ -779,7 +790,8 @@ class TinkerQuery {
 
     close.addEventListener("click", () => self.close(), false);
     edit.addEventListener("click", () => {
-      const open = last_query();
+      const con = TinkerConsole.findConsole(this.elem);
+      const open = con.lastQuery();
       if ( open && open.input.target == "query" ) {
 	open.input.value = self.query;
 	open.input.focus("query");
@@ -1089,18 +1101,11 @@ class TinkerQuery {
   }
 } // end class TinkerQuery
 
-function last_query()
-{ const q = output.lastChild;
-  if ( q && q.classList.contains("tinker-query") )
-    return q.data.query;
-  return undefined;
-}
-
 /** Run a query.  Used for e.g., consulting the current file.
  * @param {String} query is the query to run.
  */
 function query(query)
-{ const open = last_query();
+{ const open = tconsole.lastQuery();
 
   if ( open && open.input.target == "query" ) {
     open.run(query);
@@ -1502,7 +1507,6 @@ var options = {
 
 persist  = new Persist();
 tconsole = new TinkerConsole(document.querySelector("div.console"));
-output   = tconsole.output;	// TEMP
 
 SWIPL(options).then(async (module) => {
   Module = module;
