@@ -46,7 +46,6 @@ let   persist;			// Persistence management
 let   tconsole;			// left pane console area
 let   source;			// right pane (editor + file actions)
 
-let   answer;
 let   answer_ignore_nl = false;
 let   waitfor	    = null;
 let   abort_request = false;
@@ -539,7 +538,9 @@ function el(sel, ...content) {
  * its answer.
  */
 
-window.current_answer = () => answer;
+window.current_answer = () => {
+  return tconsole.currentAnswer();
+}
 
 /**
  * A console is scrollable area that can handle queries.
@@ -547,6 +548,7 @@ window.current_answer = () => answer;
 
 class TinkerConsole {
   output;			// element to write in
+  current_query;
   history;			// Query history
 
   constructor(elem) {
@@ -621,9 +623,20 @@ class TinkerConsole {
   addQuery() {
     const q = new TinkerQuery();
     this.output.appendChild(q.elem);
+    this.current_query = q;
     q.read()
   }
 
+  /**
+   * @return {HTMLDivElement} that represents the `<div>` into which
+   * the current answer must be written.  Returns `undefined` if there
+   * is no current open query.
+   */
+  currentAnswer() {
+    let q;
+    if ( (q=this.current_query) )
+      return q.answer;
+  }
 
   __getCharSize(element) {
     if ( !element.char_size )
@@ -651,8 +664,27 @@ class TinkerConsole {
 	   ];
   }
 
+  /**
+   * Clear the console.
+   */
+  clear() {
+    if ( this.current_query )
+      this.current_query.close();
+    this.output.innerHTML := "";
+    this.addQuery();
+  }
+
+  /**
+   * Print a string to the console.
+   * @param {string} line content that must be printed
+   * @param {string} cls class (stream), one of "stdout" or "stderr"
+   * @param {object} [sgr] parsed ANSI sequence.  Currently provides
+   * color, bold, underline or link.
+   */
   print(line, cls, sgr) {
-    if ( line.trim() == "" && answer && answer_ignore_nl ) {
+    if ( line.trim() == "" &&
+	 answer_ignore_nl &&
+	 this.current_query && this.current_query.answer ) {
       answer_ignore_nl = false;
       return;
     }
@@ -678,6 +710,7 @@ class TinkerConsole {
     }
     node.classList.add(cls);
     node.textContent = line;
+    const answer = this.currentAnswer();
     (answer||this.output).appendChild(node);
   }
 
@@ -762,7 +795,7 @@ class TinkerQuery {
     this.__fillControl(ctrl);
 
     this.query = query;
-    answer = this.answer = ans;
+    this.answer = ans;
   }
 
   set query(query) {
@@ -948,6 +981,9 @@ class TinkerQuery {
   }
 
   close() {			// TODO: What if not completed?
+    const con = TinkerConsole.findConsole(this.elem);
+    if ( con.current_query === this )
+      con.current_query = undefined;
     this.elem.remove();
   }
 
@@ -1010,10 +1046,10 @@ class TinkerQuery {
    */
   next_answer() {
     if ( this.answer ) {
-      const div4 = document.createElement("div");
-      div4.className = "query-answer";
-      answer.after(div4);
-      answer = this.answer = div4;
+      const ans = document.createElement("div");
+      ans.className = "query-answer";
+      this.answer.after(ans);
+      this.answer = ans;
       answer_ignore_nl = true; // suppress the first newline
     }
   }
@@ -1091,6 +1127,7 @@ class TinkerQuery {
    */
   completed() {
     this.state = "complete";
+    this.answer = undefined;
     this.addNextQuery();
   }
 
