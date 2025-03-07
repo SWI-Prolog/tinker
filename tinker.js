@@ -1374,10 +1374,12 @@ class Persist {
    *
    * @param {string} name the localStorage key
    * @param {object} into JavaScript object filled
+   * @param {Array[string]} [keys] Keys of `into` that must be saved.
+   * Defaults to the keys of `into`.
    */
   load(name, into, keys) {
     this.map[name] = { data: into,
-		       keys: keys
+		       keys: keys||Object.keys(into)
 		     };
     const item = localStorage.getItem(name);
     if ( item ) {
