@@ -1269,17 +1269,17 @@ var options = {
   on_output: print_output
 };
 
-SWIPL(options).then(async (module) =>
-    { Module = module;
-      Prolog = Module.prolog;
-      Module.FS.mkdir(user_dir);
-      await Prolog.load_scripts();
-      await Prolog.consult("tinker.pl", {module:"system"});
-      Prolog.query("tinker:tinker_init(Dir)", {Dir:user_dir}).once();
-      Prolog.call("version");
-      window.source = source = new TinkerSource(
-	document.querySelector("form[name=source]"));
-    });
+SWIPL(options).then(async (module) => {
+  Module = module;
+  Prolog = Module.prolog;
+  Module.FS.mkdir(user_dir);
+  await Prolog.load_scripts();
+  await Prolog.consult("tinker.pl", {module:"system"});
+  Prolog.query("tinker:tinker_init(Dir)", {Dir:user_dir}).once();
+  Prolog.call("version");
+  window.source = source = new TinkerSource(
+    document.querySelector("form[name=source]"));
+});
 
 
 		 /*******************************
