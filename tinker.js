@@ -870,11 +870,13 @@ class TinkerQuery {
     this.input.focus("query");
   }
 
+  /**
+   * Run the query.
+   */
   run(line) {
     this.query = line;
     const jqline = new Prolog.Compound(":", "user", line);
-    const jcall  = new Prolog.Compound("wasm_query", jqline);
-    const jgoal  = new Prolog.Compound(":", "wasm", jcall);
+    const jgoal  = new Prolog.Compound("tinker_run", this, jqline);
     const rc = Prolog.call(jgoal, { async:true, debugger:true });
     this.state = "run";
     const prev = this.previous();

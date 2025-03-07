@@ -32,9 +32,12 @@
     POSSIBILITY OF SUCH DAMAGE.
 */
 
-:- module(tinker, [ cls/0,          %
-                        html/1          % +HTMLTerm
-                      ]).
+:- module(tinker,
+          [ cls/0,		%
+            html/1,		% +HTMLTerm
+            tinker_run/2,	% +TinkerQuery, :QueryString
+            tinker_query/1      % -TinkerQuery
+          ]).
 :- use_module(library(wasm)).
 :- use_module(library(prolog_wrap), [wrap_predicate/4]).
 :- use_module(library(ansi_term), []).
@@ -54,7 +57,8 @@
 :- autoload(library(lists), [append/3]).
 
 :- meta_predicate
-    html(:).
+    html(:),
+    tinker_run(+, :).
 
 % imported from library(wasm).  This enables development.
 :- op(700, xfx, :=).           % Result := Expression
@@ -67,6 +71,8 @@
     trace_action/2,
     complete_input/4.
 
+%!  tinker_init(+UserDir)
+
 tinker_init(UserDir) :-
     set_prolog_flag(tty_control, true),
     set_prolog_flag(color_term, true),
@@ -75,6 +81,21 @@ tinker_init(UserDir) :-
     set_stream(user_output, tty(true)),
     set_stream(user_error, tty(true)),
     working_directory(_, UserDir).
+
+%!  tinker_run(+TinkerQuery, :Query:string)
+
+tinker_run(TinkerQuery, Query) :-
+    setup_call_cleanup(
+        nb_setval(tinker_query, TinkerQuery),
+        wasm_query(Query),
+        nb_delete(tinker_query)).
+
+%!  tinker_query(-TinkerQuery) is det.
+%
+%   TinkerQuery is the JavaScript object running this query.
+
+tinker_query(TinkerQuery) :-
+    nb_current(tinker_query, TinkerQuery).
 
 :- multifile prolog_edit:edit_source/1.
 
