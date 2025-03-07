@@ -505,53 +505,6 @@ class TinkerEditor {
   }
 } // End class TinkerEditor
 
-
-		 /*******************************
-		 *    PROLOG OUTPUT STREAMS     *
-		 *******************************/
-
-function print_output(line, cls, sgr) {
-  if ( line.trim() == "" && answer && answer_ignore_nl )
-  { answer_ignore_nl = false;
-    return;
-  }
-
-  let node;
-  if ( sgr && sgr.link )
-  { node = document.createElement('a');
-    node.href = sgr.link;
-    node.target = "_blank";
-    node.addEventListener("click", tty_link);
-  } else
-  { node = document.createElement('span');
-    if ( sgr )
-    { if ( sgr.color )
-      node.style.color = sgr.color;
-      if ( sgr.background_color )
-	node.background_color.color = sgr.background_color;
-      if ( sgr.bold )
-	node.classList.add("bold");
-      if ( sgr.underline )
-	node.classList.add("underline");
-    }
-  }
-  node.classList.add(cls);
-  node.textContent = line;
-  (answer||output).appendChild(node);
-};
-
-
-async function tty_link(ev)
-{ const a = ev.target;
-  const to = a.href;
-  if ( to.startsWith("file://") ||
-       to.match("https?://.*\\.pl\(#\d+\)?") )
-  { ev.preventDefault();
-    await Prolog.forEach("tinker:tty_link(Link)", {Link:to});
-  }
-  // Use default action
-}
-
 function getPromiseFromEvent(item, event) {
   return new Prolog.Promise((resolve) => {
     const listener = (ev) => {
@@ -685,6 +638,53 @@ class TinkerConsole {
     return [ Math.floor(wrapper.clientHeight/charsz.h),
 	     Math.floor(wrapper.clientWidth/charsz.w)
 	   ];
+  }
+
+  print(line, cls, sgr) {
+    if ( line.trim() == "" && answer && answer_ignore_nl ) {
+      answer_ignore_nl = false;
+      return;
+    }
+
+    let node;
+    if ( sgr && sgr.link ) {
+      node = document.createElement('a');
+      node.href = sgr.link;
+      node.target = "_blank";
+      node.addEventListener("click", this.tty_link);
+    } else {
+      node = document.createElement('span');
+      if ( sgr ) {
+	if ( sgr.color )
+	  node.style.color = sgr.color;
+	if ( sgr.background_color )
+	  node.background_color.color = sgr.background_color;
+	if ( sgr.bold )
+	  node.classList.add("bold");
+	if ( sgr.underline )
+	  node.classList.add("underline");
+      }
+    }
+    node.classList.add(cls);
+    node.textContent = line;
+    (answer||output).appendChild(node);
+  }
+
+  /**
+   * Handle a click on a terminal hyperlink.  If we can trace the link
+   * to one  of our  files, call `tinker:tty_link/1`.   Otherwise open
+   * the link in a new tab.
+   * @param {Event} ev is the click event on the `<a>` element
+   */
+  async tty_link(ev) {
+    const a = ev.target;
+    const to = a.href;
+    if ( to.startsWith("file://") ||
+	 to.match("https?://.*\\.pl\(#\d+\)?") )
+    { ev.preventDefault();
+      await Prolog.forEach("tinker:tty_link(Link)", {Link:to});
+    }
+    // Use default action
   }
 
   /**
@@ -1011,14 +1011,15 @@ class TinkerQuery {
    */
   reply_more(action) {
     if ( waitfor && waitfor.yield == "more" ) {
+      const con = TinkerConsole.findConsole(this.elem);
       switch(action)
       { case "redo":
-	{ print_output(";", "stdout");
+	{ con.print(";", "stdout");
 	  this.next_answer();
 	  break;
 	}
 	case "continue":
-	{ print_output(".", "stdout");
+	{ con.print(".", "stdout");
 	  answer_ignore_nl = true;
 	  break;
 	}
@@ -1029,7 +1030,8 @@ class TinkerQuery {
 
   reply_trace(action) {
     if ( waitfor && waitfor.yield == "trace" ) {
-      print_output(` [${action}]`, "stderr", {color: "#888"});
+      const con = TinkerConsole.findConsole(this.elem);
+      con.print(` [${action}]`, "stderr", {color: "#888"});
       Prolog.call("nl(user_error)", {nodebug:true});
 
       switch(action)
@@ -1483,6 +1485,10 @@ class Persist {
 		 /*******************************
 		 *         START PROLOG         *
 		 *******************************/
+
+function print_output(line, cls, sgr) {
+  tconsole.print(line, cls, sgr);
+}
 
 let Prolog;
 let Module;
