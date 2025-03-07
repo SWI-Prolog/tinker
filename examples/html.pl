@@ -7,12 +7,17 @@
 :- use_module(library(http/html_write)).
 :- use_module(library(dcg/high_order)).
 
-%!  clr
+%!  cls
 %
-%   Clear the output window.
+%   Clear the output window. The predicate `thinker_query/1` returns the
+%   JavaScript element that represents the  running query. The read-only
+%   property `TinkerQuery.console` returns the   TinkerConsole`Q,  which
+%   implements `clear()`. Note that this predicate   is also provided by
+%   Tinker itself.
 
-clr :-
-    document.getElementById("output").innerHTML := "".
+cls :-
+    thinker_query(Q),
+    _ := Q.console.clear().
 
 %!  html
 %
@@ -20,6 +25,8 @@ clr :-
 %   generation infra structure.   For example:
 %
 %       ?- html(['Hello ', b(world)]).
+%
+%    Note that this predicate is also provided by Tinker itself.
 
 html(Term) :-
     phrase(html(Term), Tokens),

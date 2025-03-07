@@ -394,7 +394,8 @@ complete_input(Before,After,Delete,Completions) :-
 %   Clear the output window.
 
 cls :-
-    document.getElementById("output").innerHTML := "".
+    tinker_query(Q),
+    _ := Q.console.clear().
 
 %!  html(:Term)
 %

@@ -668,10 +668,14 @@ class TinkerConsole {
    * Clear the console.
    */
   clear() {
-    if ( this.current_query )
-      this.current_query.close();
-    this.output.innerHTML := "";
-    this.addQuery();
+    const rem = [];
+    for(let node of this.output.childNodes) {
+      if ( !this.current_query ||
+	   this.current_query.elem !== node )
+	rem.push(node);
+    }
+    for(let node of rem)
+      node.remove();
   }
 
   /**
@@ -810,6 +814,13 @@ class TinkerQuery {
     return span.textContent;
   }
 
+  /**
+   * @type {TinkerConsole} Console this query belongs to.
+   */
+  get console() {
+    return TinkerConsole.findConsole(this.elem);
+  }
+
   __fillHeader(hdr) {
     const self = this;
     const edit  = el("span", "\u270E");
@@ -823,7 +834,7 @@ class TinkerQuery {
 
     close.addEventListener("click", () => self.close(), false);
     edit.addEventListener("click", () => {
-      const con = TinkerConsole.findConsole(this.elem);
+      const con = this.console;
       const open = con.lastQuery();
       if ( open && open.input.target == "query" ) {
 	open.input.value = self.query;
@@ -981,7 +992,7 @@ class TinkerQuery {
   }
 
   close() {			// TODO: What if not completed?
-    const con = TinkerConsole.findConsole(this.elem);
+    const con = this.console;
     if ( con.current_query === this )
       con.current_query = undefined;
     this.elem.remove();
@@ -1059,7 +1070,7 @@ class TinkerQuery {
    */
   reply_more(action) {
     if ( waitfor && waitfor.yield == "more" ) {
-      const con = TinkerConsole.findConsole(this.elem);
+      const con = this.console;
       switch(action)
       { case "redo":
 	{ con.print(";", "stdout");
@@ -1078,7 +1089,7 @@ class TinkerQuery {
 
   reply_trace(action) {
     if ( waitfor && waitfor.yield == "trace" ) {
-      const con = TinkerConsole.findConsole(this.elem);
+      const con = this.console;
       con.print(` [${action}]`, "stderr", {color: "#888"});
       Prolog.call("nl(user_error)", {nodebug:true});
 
@@ -1118,8 +1129,7 @@ class TinkerQuery {
   }
 
   addNextQuery() {
-    const tconsole = TinkerConsole.findConsole(this.elem);
-    tconsole.addQuery();
+    this.console.addQuery();
   }
 
   /**
