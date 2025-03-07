@@ -41,16 +41,16 @@ const default_file  = `${user_dir}/scratch.pl`;
 let   files	    = { current: default_file,
 			list: [default_file]
 		      };
+let   history       = { stack: [], current: null };
+
 let   tconsole;			// left pane console area
 let   source;			// right pane (editor + file actions)
-let   cm;			// The editor (TODO: remove)
 
 let   output;			// console output div
 let   answer;
 let   answer_ignore_nl = false;
 let   waitfor	    = null;
 let   abort_request = false;
-let   history       = { stack: [], current: null };
 
 function user_file(file)
 { return `${user_dir}/${file}`;
@@ -80,8 +80,6 @@ class TinkerSource {
     this.select_file = this.byname("select-file");
     this.editor = new TinkerEditor(this.byname("editor"),
 				   () => self.afterEditor());
-    window.cm = cm = this.editor;	// TODO hack
-
     this.armFileSelect();
     this.armNewFileButton();
     this.armFileCreateButton();
@@ -95,7 +93,8 @@ class TinkerSource {
     this.addExamples();
   }
 
-  setValue(source)    { this.editor.setValue(source); }
+  set value(source)   { this.editor.value = source; }
+  get value()         { return this.editor.value; }
   goto(line, options) { this.editor.goto(line, options); }
 
 
@@ -312,7 +311,7 @@ class TinkerSource {
     const btn = this.elem.querySelector("a.btn.download");
     if ( btn ) {
       btn.addEventListener("click", (ev) => {
-	const text = this.getValue();
+	const text = this.value;
 	const data = new Blob([text]);
 	const btn = ev.target;
 	btn.href = URL.createObjectURL(data);
@@ -327,7 +326,7 @@ class TinkerSource {
       const name = this.userFile(this.baseName(file.name));
       this.addFileOption(name);
       this.switchToFile(name);
-      this.setValue(content);
+      this.value = content;
       Persist.saveFile(name);
     }
   }
@@ -337,13 +336,13 @@ class TinkerSource {
     if ( btn ) {
       btn.addEventListener("click", (ev) => {
 	const exch = ev.target.closest("span.exch-files");
-	if ( exch.classList.contains("upload-armed") )
-	{ const files = exch.querySelector('input.upload-file').files;
-	  download_files(files).then(() => {
+	if ( exch.classList.contains("upload-armed") ) {
+	  const files = exch.querySelector('input.upload-file').files;
+	  this.download_files(files).then(() => {
 	    exch.classList.remove("upload-armed");
 	  });
-	} else
-	{ exch.classList.add("upload-armed")
+	} else {
+	  exch.classList.add("upload-armed")
 	}
       });
     }
@@ -459,17 +458,14 @@ class TinkerEditor {
   }
 
   /**
-   * @param {string} new content for the editor
+   * Content of the editor
+   * @type {string}
    */
-  setValue(content) {
-    return this.cm.setValue(content);
-  }
-
-  /**
-   * @return {string} current content of the editor
-   */
-  getValue() {
+  get value() {
     return this.cm.getValue();
+  }
+  set value(content) {
+    this.cm.setValue(content);
   }
 
   /**
@@ -573,7 +569,8 @@ function getPromiseFromEvent(item, event) {
 function el(sel, ...content) {
   const ar   = sel.split(".");
   const elem = document.createElement(ar.shift());
-  elem.className = ar.join(" ");
+  if ( ar.length > 0 )
+    elem.className = ar.join(" ");
   for(let e of content) {
     if ( typeof(e) === "string" )
       e = document.createTextNode(e);
@@ -1089,6 +1086,7 @@ class TinkerInput {
 		   input);
     this.elem.data = { instance: this };
     input.type = "text";
+    input.name = "tinker-input";
     input.autocapitalize = "none";
     input.autocomplete = "off"
     this.armInput();
@@ -1394,15 +1392,15 @@ class Persist
 
     try
     { let content = Module.FS.readFile(name, { encoding: 'utf8' });
-      cm.setValue(content);
+      source.value = content;
     } catch(e)
-    { cm.setValue("");
+    { source.value = "";
     }
   }
 
   static saveFile(name, force)
   { if ( force || is_user_file(name) )
-    { Module.FS.writeFile(name, cm.getValue());
+    { Module.FS.writeFile(name, source.value);
     }
   }
 
@@ -1432,10 +1430,10 @@ class Persist
   }
 }
 
-window.onunload = (e) => {
-  if ( Persist.autosave )
+window.addEventListener("visibilitychange", () => {
+  if ( document.hidden && Persist.autosave )
     Persist.persist();
-}
+});
 
 		 /*******************************
 		 *          DEMO CALLS          *

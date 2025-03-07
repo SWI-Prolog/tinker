@@ -112,7 +112,7 @@ edit_source(Spec) :-
     load_file(File, String),
     _ := source.addFileOption(#File),
     _ := source.switchToFile(#File),
-    _ := source.setValue(String),
+    source.value := String,
     (   memberchk(line(Line), Spec)
     ->  (   memberchk(linepos(LinePos), Spec)
         ->  Options = _{linepos:LinePos}
