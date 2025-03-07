@@ -41,10 +41,11 @@ const default_file  = `${user_dir}/scratch.pl`;
 let   files	    = { current: default_file,
 			list: [default_file]
 		      };
+let   console;			// left pane console area
 let   source;			// right pane (editor + file actions)
 let   cm;			// The editor (TODO: remove)
 
-const output	    = document.querySelector('div.output');
+let   output;			// console output div
 let   answer;
 let   answer_ignore_nl = false;
 let   waitfor	    = null;
@@ -591,6 +592,28 @@ function el(sel, ...content) {
  */
 
 window.current_answer = () => answer;
+
+/**
+ * A console is scrollable area that can handle queries.
+ */
+
+class TinkerConsole {
+  output;			// element to write in
+
+  constructor(elem) {
+    this.output = el("div.output");
+    const wrapper = el("div.scroll-wrapper",
+		       el("span.scroll-start-at-top"));
+    elem.parentNode.insertBefore(wrapper, elem);
+    wrapper.appendChild(elem);
+    elem.appendChild(this.output);
+  }
+}
+
+
+		 /*******************************
+		 *         TINKER QUERY         *
+		 *******************************/
 
 /** Add a structure for a query.  The structure is
  *
@@ -1268,6 +1291,9 @@ var options = {
   },
   on_output: print_output
 };
+
+console = new TinkerConsole(document.querySelector("div.console"));
+output  = console.output;	// TEMP
 
 SWIPL(options).then(async (module) => {
   Module = module;
