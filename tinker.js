@@ -1391,14 +1391,17 @@ class Persist {
     }
   }
 
-  persistsFile(name)
-  { if ( is_user_file(name) )
-    { try
-      { let content = Module.FS.readFile(name, { encoding: 'utf8' });
-	localStorage.setItem(name, content);
-      } catch(e)
-      { localStorage.removeItem(name);
+  /**
+   * Save all objects registered with `load()` to the localStorage.
+   */
+  persistRegistered() {
+    for(let k of Object.keys(this.map)) {
+      const data = this.map[k].data;
+      const save = {};
+      for( let key of this.map[k].keys ) {
+	save[key] = data[key];
       }
+      localStorage.setItem(k, JSON.stringify(save));
     }
   }
 
@@ -1444,28 +1447,32 @@ class Persist {
     }
   }
 
-  persistRegistered() {
-    for(let k of Object.keys(this.map)) {
-      const data = this.map[k].data;
-      const save = {};
-      for( let key of this.map[k].keys ) {
-	save[key] = data[key];
+  persistsFile(name)
+  { if ( is_user_file(name) )
+    { try
+      { let content = Module.FS.readFile(name, { encoding: 'utf8' });
+	localStorage.setItem(name, content);
+      } catch(e)
+      { localStorage.removeItem(name);
       }
-      localStorage.setItem(k, JSON.stringify(save));
     }
   }
 
-  persist()
-  { this.persistRegistered();
-    const l = files.list.filter((n) => is_user_file(n)||n == default_file);
+  persistFiles()
+  { const l = files.list.filter((n) => is_user_file(n));
     const save =
 	  { list: l,
 	    current: l.includes(files.current) ? files.current : default_file
 	  };
 
-    localStorage.setItem("files",   JSON.stringify(save));
+    localStorage.setItem("files", JSON.stringify(save));
 
     save.list.forEach((f) => this.persistsFile(f));
+  }
+
+  persist()
+  { this.persistRegistered();
+    this.persistFiles();
   }
 
   restore()
