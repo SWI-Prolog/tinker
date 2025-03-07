@@ -847,7 +847,7 @@ class TinkerQuery {
     const div = el("div.tinker-keyboard",
 		   "⌨️",
 		   el("span", "waiting for a key"));
-    div.tabindex = 0;
+    div.tabIndex = 0;
     return div;
   }
 
@@ -856,11 +856,14 @@ class TinkerQuery {
    */
   async get_single_char() {
     const kbd = this.elem.querySelector("div.tinker-keyboard");
-    this.elem.classList.add("key");
-    kbd.focus();
-    const ev = await getPromiseFromEvent(kbd, "keyup");
-    this.elem.classList.remove("key");
-    return ev.keyCode;
+    if ( kbd ) {
+      this.elem.classList.add("key");
+      kbd.focus();
+      const ev = await getPromiseFromEvent(kbd, "keyup");
+      this.elem.classList.remove("key");
+      return ev.keyCode;
+    } else
+      return -1;
   }
 
   promptLine(target) {

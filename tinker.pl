@@ -224,8 +224,12 @@ dbg_backtrace(Frame, Depth) :-
 
 :- abolish(system:get_single_char/1).
 system:get_single_char(Code) :-
-    Promise := get_single_char(),
-    await(Promise, Code).
+    tinker_query(Q),
+    Promise := Q.get_single_char(),
+    (   integer(Promise)                % typically -1 for error
+    ->  Code = Promise
+    ;   await(Promise, Code)
+    ).
 
 system:tty_size(Rows, Columns) :-
     tinker_query(Q),
