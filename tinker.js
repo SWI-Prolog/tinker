@@ -44,8 +44,7 @@ let   files	    = { current: default_file,
 let   source;			// right pane (editor + file actions)
 let   cm;			// The editor (TODO: remove)
 
-const terminal	    = document.getElementById('console');
-const output	    = document.getElementById('output');
+const output	    = document.querySelector('div.output');
 let   answer;
 let   answer_ignore_nl = false;
 let   waitfor	    = null;
@@ -792,6 +791,11 @@ class TinkerQuery {
     return ev.keyCode;
   }
 
+  promptLine(target) {
+    this.state = "prompt "+target;
+    this.input.focus(target);
+  }
+
   /**
    * Set/clear.toggle the collapsed state of the query
    */
@@ -1192,14 +1196,6 @@ const trace_shortcuts = {
   "?":	   "help"
 };
 
-		 /*******************************
-		 *       TOPLEVEL STATES        *
-		 *******************************/
-
-function set_state(state)
-{ terminal.className = "console " + state;
-}
-
 /**
  * Handle the return of Prolog.call().  This is a success, failure,
  * error or yield code.
@@ -1226,8 +1222,7 @@ function next(rc, query)
         /*FALLTHROUGH*/
       case "term":
       case "line":
-        set_state("prompt "+rc.yield);
-        query.input.focus(rc.yield);
+        query.promptLine(rc.yield);
         break;
       case "more":
         query.promptMore();
