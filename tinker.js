@@ -43,6 +43,7 @@ let   files	    = { current: default_file,
 		      };
 let   history       = { stack: [], current: null };
 
+let   persist;			// Persistence management
 let   tconsole;			// left pane console area
 let   source;			// right pane (editor + file actions)
 
@@ -165,11 +166,11 @@ class TinkerSource {
 
     if ( files.current != name ) {
       if ( files.current )
-	Persist.saveFile(files.current);
+	persist.saveFile(files.current);
       files.current = name;
       if ( !files.list.includes(name) )
 	files.list.push(name);
-      Persist.loadFile(name);
+      persist.loadFile(name);
       this.updateDownload(name);
     }
   }
@@ -327,7 +328,7 @@ class TinkerSource {
       this.addFileOption(name);
       this.switchToFile(name);
       this.value = content;
-      Persist.saveFile(name);
+      persist.saveFile(name);
     }
   }
 
@@ -355,7 +356,7 @@ class TinkerSource {
   armConsult() {
     this.elem.addEventListener('submit', (e) => {
       e.preventDefault();
-      Persist.saveFile(files.current);
+      persist.saveFile(files.current);
       query(`consult('${files.current}').`);
     }, false);
   }
@@ -440,7 +441,7 @@ class TinkerEditor {
 	    ], (cm) => {
 	      this.CodeMirror = cm;
 	      this.createCM(container);
-	      Persist.restore();
+	      persist.restore();
 	      cont.call(this.cm);
 	    });
 
@@ -1313,6 +1314,101 @@ function next(rc, query)
   }
 }
 
+
+		 /*******************************
+		 *        PERSIST FILES         *
+		 *******************************/
+
+class Persist {
+  constructor() {
+    const self = this;
+    this.autosave = true;
+
+    window.addEventListener("visibilitychange", () => {
+      if ( document.hidden && this.autosave )
+	self.persist();
+    });
+  }
+
+  persistsFile(name)
+  { if ( is_user_file(name) )
+    { try
+      { let content = Module.FS.readFile(name, { encoding: 'utf8' });
+	localStorage.setItem(name, content);
+      } catch(e)
+      { localStorage.removeItem(name);
+      }
+    }
+  }
+
+  restoreFile(name)
+  { const content = localStorage.getItem(name)||"";
+
+    if ( content || name == default_file )
+    { Module.FS.writeFile(name, content);
+      source.addFileOption(name);
+    } else
+    { files.list = files.list.filter((n) => (n != name));
+    }
+  }
+
+  restoreFiles()
+  { const self = this;
+    let f = localStorage.getItem("files");
+    if ( f ) files = JSON.parse(f);
+
+    files.list.forEach((f) => self.restoreFile(f));
+    if ( !files.list.includes(default_file) )
+      files.list.unshift(default_file);
+
+    let current = files.current;
+    files.current = null;
+    source.switchToFile(current || default_file);
+  }
+
+  loadFile(name)
+  { name = name || files.current;
+
+    try
+    { let content = Module.FS.readFile(name, { encoding: 'utf8' });
+      source.value = content;
+    } catch(e)
+    { source.value = "";
+    }
+  }
+
+  saveFile(name, force)
+  { if ( force || is_user_file(name) )
+    { Module.FS.writeFile(name, source.value);
+    }
+  }
+
+  persist()
+  { localStorage.setItem("history", JSON.stringify(history));
+    const l = files.list.filter((n) => is_user_file(n)||n == default_file);
+    const save =
+	  { list: l,
+	    current: l.includes(files.current) ? files.current : default_file
+	  };
+
+    localStorage.setItem("files",   JSON.stringify(save));
+
+    save.list.forEach((f) => this.persistsFile(f));
+  }
+
+  restoreHistory()
+  { const h = localStorage.getItem("history");
+
+    if ( h )
+      history = JSON.parse(h);
+  }
+
+  restore()
+  { this.restoreFiles();
+    this.restoreHistory();
+  }
+}
+
 		 /*******************************
 		 *         START PROLOG         *
 		 *******************************/
@@ -1327,6 +1423,7 @@ var options = {
   on_output: print_output
 };
 
+persist  = new Persist();
 tconsole = new TinkerConsole(document.querySelector("div.console"));
 output   = tconsole.output;	// TEMP
 
@@ -1341,98 +1438,6 @@ SWIPL(options).then(async (module) => {
   tconsole.addQuery();
   window.source = source = new TinkerSource(
     document.querySelector("form[name=source]"));
-});
-
-
-		 /*******************************
-		 *        PERSIST FILES         *
-		 *******************************/
-
-class Persist
-{ static autosave = true;
-
-  static persistsFile(name)
-  { if ( is_user_file(name) )
-    { try
-      { let content = Module.FS.readFile(name, { encoding: 'utf8' });
-	localStorage.setItem(name, content);
-      } catch(e)
-      { localStorage.removeItem(name);
-      }
-    }
-  }
-
-  static restoreFile(name)
-  { let content = localStorage.getItem(name)||"";
-
-    if ( content || name == default_file )
-    { Module.FS.writeFile(name, content);
-      source.addFileOption(name);
-    } else
-    { files.list = files.list.filter((n) => (n != name));
-    }
-  }
-
-  static restoreFiles()
-  { const self = this;
-    let f = localStorage.getItem("files");
-    if ( f ) files = JSON.parse(f);
-
-    files.list.forEach((f) => self.restoreFile(f));
-    if ( !files.list.includes(default_file) )
-      files.list.unshift(default_file);
-
-    let current = files.current;
-    files.current = null;
-    source.switchToFile(current || default_file);
-  }
-
-  static loadFile(name)
-  { name = name || files.current;
-
-    try
-    { let content = Module.FS.readFile(name, { encoding: 'utf8' });
-      source.value = content;
-    } catch(e)
-    { source.value = "";
-    }
-  }
-
-  static saveFile(name, force)
-  { if ( force || is_user_file(name) )
-    { Module.FS.writeFile(name, source.value);
-    }
-  }
-
-  static persist()
-  { localStorage.setItem("history", JSON.stringify(history));
-    const l = files.list.filter((n) => is_user_file(n)||n == default_file);
-    const save =
-	  { list: l,
-	    current: l.includes(files.current) ? files.current : default_file
-	  };
-
-    localStorage.setItem("files",   JSON.stringify(save));
-
-    save.list.forEach((f) => this.persistsFile(f));
-  }
-
-  static restoreHistory()
-  { const h = localStorage.getItem("history");
-
-    if ( h )
-      history = JSON.parse(h);
-  }
-
-  static restore()
-  { this.restoreFiles();
-    this.restoreHistory();
-  }
-}
-
-window.addEventListener("visibilitychange", () => {
-  if ( document.hidden && Persist.autosave )
-    Persist.persist();
 });
 
 		 /*******************************
