@@ -353,7 +353,7 @@ class TinkerSource {
     this.elem.addEventListener('submit', (e) => {
       e.preventDefault();
       persist.saveFile(files.current);
-      query(`consult('${files.current}').`);
+      tconsole.injectQuery(`consult('${files.current}').`);
     }, false);
   }
 
@@ -616,14 +616,42 @@ class TinkerConsole {
 
   /**
    * Add a  new query.  This  presents a  prompt.  After the  query is
-   * entered, it will be executed in the context of this query.
+   * entered, it  will be executed in  the context of this  query.  If
+   * there is already a query with read state, select that.
    */
 
   addQuery() {
-    const q = new TinkerQuery();
-    this.output.appendChild(q.elem);
-    this.current_query = q;
-    q.read()
+    const open = this.elem.querySelector("div.tinker-query.read.query");
+    if ( open ) {
+      open.data.query.input.focus("query");
+    } else {
+      const q = new TinkerQuery();
+      this.output.appendChild(q.elem);
+      q.read();
+    }
+  }
+
+  /**
+   * Inject a  query.  This is used  by e.g., the consult  button.  If
+   * the last query  is open and empty, use that.   Otherwise inject a
+   * query before the last.
+   *
+   * @param {string} query query to inject.
+   */
+  injectQuery(query) {
+    const open = this.lastQuery();
+
+    if ( open && open.input.target == "query" ) {
+      if ( !open.input.value.trim() ) {
+	open.run(query);
+      } else {
+	const q = new TinkerQuery();
+	open.elem.parentNode.insertBefore(q.elem, open.elem);
+	q.run(query);
+      }
+    } else {
+      Prolog.call(query);
+    }
   }
 
   /**
@@ -980,6 +1008,8 @@ class TinkerQuery {
     this.#state = state;
     this.elem.classList.remove(...state_classes);
     this.elem.classList.add(...state.split(" "));
+    if ( state != "complete" )
+      this.console.current_query = this;
   }
 
   get state() {
@@ -1147,18 +1177,6 @@ class TinkerQuery {
   }
 } // end class TinkerQuery
 
-/** Run a query.  Used for e.g., consulting the current file.
- * @param {String} query is the query to run.
- */
-function query(query)
-{ const open = tconsole.lastQuery();
-
-  if ( open && open.input.target == "query" ) {
-    open.run(query);
-  } else
-  { Prolog.call(query);
-  }
-}
 
 		 /*******************************
 		 *        ENTER A QUERY         *
