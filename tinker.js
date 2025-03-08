@@ -45,9 +45,6 @@ let   persist;			// Persistence management
 let   source;			// right pane (editor + file actions)
 let   tconsole;			// left pane console area
 
-let   waitfor	    = null;
-let   abort_request = false;
-
 		 /*******************************
 		 *            SOURCE            *
 		 *******************************/
@@ -902,12 +899,12 @@ class TinkerQuery {
 
     btn.addEventListener("click", (e) => {
       e.preventDefault();
-      if ( waitfor && waitfor.abort )
+      if ( this.waitfor && this.waitfor.abort )
       { console.log("aborting", waitfor);
-	waitfor.abort();
+	this.waitfor.abort();
       } else
       { console.log("Requesting abort");
-	abort_request = true;
+	this.abort_request = true;
       }
     });
 
@@ -1088,21 +1085,21 @@ class TinkerQuery {
    */
 
   next(rc)
-  { waitfor = null;
+  { this.waitfor = null;
 
     if ( rc.yield !== undefined ) {
-      waitfor = rc;
+      this.waitfor = rc;
 
       Prolog.flush_output();
 
-      if ( abort_request ) {
-	abort_request = false;
-	return this.next(waitfor.resume("wasm_abort"));
+      if ( this.abort_request ) {
+	this.abort_request = false;
+	return this.next(rc.resume("wasm_abort"));
       }
 
       switch(rc.yield)
       { case "beat":
-          return setTimeout(() => this.next(waitfor.resume("true")), 0);
+          return setTimeout(() => this.next(rc.resume("true")), 0);
 	case "query":
           this.answer = undefined;
           /*FALLTHROUGH*/
@@ -1114,7 +1111,7 @@ class TinkerQuery {
           this.promptMore();
           break;
 	case "trace":
-	{ this.trace_action("print", waitfor.trace_event);
+	{ this.trace_action("print", rc.trace_event);
 	  this.promptTrace();
           break;
 	}
@@ -1144,7 +1141,7 @@ class TinkerQuery {
       case "prompt term":
       case "prompt line":
       { this.state = "run";
-	this.next(waitfor.resume(line));
+	this.next(this.waitfor.resume(line));
 	break;
       }
     }
@@ -1168,7 +1165,7 @@ class TinkerQuery {
    * Handle the "Next"/"Stop" buttons
    */
   reply_more(action) {
-    if ( waitfor && waitfor.yield == "more" ) {
+    if ( this.waitfor && this.waitfor.yield == "more" ) {
       const con = this.console;
       switch(action)
       { case "redo":
@@ -1182,12 +1179,12 @@ class TinkerQuery {
 	  break;
 	}
       }
-      this.next(waitfor.resume(action));
+      this.next(this.waitfor.resume(action));
     }
   }
 
   reply_trace(action) {
-    if ( waitfor && waitfor.yield == "trace" ) {
+    if ( this.waitfor && this.waitfor.yield == "trace" ) {
       const con = this.console;
       con.print(` [${action}]`, "stderr", {color: "#888"});
       Prolog.call("nl(user_error)", {nodebug:true});
@@ -1196,12 +1193,12 @@ class TinkerQuery {
       { case "goals":
 	case "listing":
 	case "help":
-	{ this.trace_action(action, waitfor.trace_event);
+	{ this.trace_action(action, this.waitfor.trace_event);
 	  break;
 	}
 	default:
 	{ this.state = "run";
-	  this.next(waitfor.resume(action));
+	  this.next(this.waitfor.resume(action));
 	}
       }
     }
