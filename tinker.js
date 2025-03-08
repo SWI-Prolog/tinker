@@ -1078,7 +1078,61 @@ class TinkerQuery {
     const prev = this.previous();
     if ( prev )
       prev.collapsed(true);
-    next(rc, this);
+    this.next(rc);
+  }
+
+  /**
+   * Handle the return of Prolog.call().  This is a success, failure,
+   * error or yield code.
+   * @param {object} rc Result from Prolog.call() using `async:true`.
+   */
+
+  next(rc)
+  { waitfor = null;
+
+    if ( rc.yield !== undefined ) {
+      waitfor = rc;
+
+      Prolog.flush_output();
+
+      if ( abort_request ) {
+	abort_request = false;
+	return this.next(waitfor.resume("wasm_abort"));
+      }
+
+      switch(rc.yield)
+      { case "beat":
+          return setTimeout(() => this.next(waitfor.resume("true")), 0);
+	case "query":
+          this.answer = undefined;
+          /*FALLTHROUGH*/
+	case "term":
+	case "line":
+          this.promptLine(rc.yield);
+          break;
+	case "more":
+          this.promptMore();
+          break;
+	case "trace":
+	{ this.trace_action("print", waitfor.trace_event);
+	  this.promptTrace();
+          break;
+	}
+	case "builtin":
+	{ rc.resume((rc) => this.next(rc));
+          break;
+	}
+      }
+    } else {
+      if ( rc.error ) {
+	if ( rc.message == "Execution Aborted" )
+	{ Prolog.call("print_message(informational, unwind(abort))");
+	} else
+	{ console.log("Unhandled exception; restarting", rc);
+	}
+      }
+      this.completed();
+    }
   }
 
   handleUserInput(line) {
@@ -1090,7 +1144,7 @@ class TinkerQuery {
       case "prompt term":
       case "prompt line":
       { this.state = "run";
-	next(waitfor.resume(line), this);
+	this.next(waitfor.resume(line));
 	break;
       }
     }
@@ -1128,7 +1182,7 @@ class TinkerQuery {
 	  break;
 	}
       }
-      next(waitfor.resume(action), this);
+      this.next(waitfor.resume(action));
     }
   }
 
@@ -1147,7 +1201,7 @@ class TinkerQuery {
 	}
 	default:
 	{ this.state = "run";
-	  next(waitfor.resume(action), this);
+	  this.next(waitfor.resume(action));
 	}
       }
     }
@@ -1381,59 +1435,6 @@ const trace_shortcuts = {
   "u":	   "up",
   "?":	   "help"
 };
-
-/**
- * Handle the return of Prolog.call().  This is a success, failure,
- * error or yield code.
- */
-
-function next(rc, query)
-{ waitfor = null;
-
-  if ( rc.yield !== undefined )
-  { waitfor = rc;
-
-    Prolog.flush_output();
-
-    if ( abort_request )
-    { abort_request = false;
-      return next(waitfor.resume("wasm_abort"), query);
-    }
-
-    switch(rc.yield)
-    { case "beat":
-        return setTimeout(() => next(waitfor.resume("true"), query), 0);
-      case "query":
-        answer = undefined;
-        /*FALLTHROUGH*/
-      case "term":
-      case "line":
-        query.promptLine(rc.yield);
-        break;
-      case "more":
-        query.promptMore();
-        break;
-      case "trace":
-      { query.trace_action("print", waitfor.trace_event);
-	query.promptTrace();
-        break;
-      }
-      case "builtin":
-      { rc.resume((rc)=>next(rc, query));
-        break;
-      }
-    }
-  } else {
-    if ( rc.error ) {
-      if ( rc.message == "Execution Aborted" )
-      { Prolog.call("print_message(informational, unwind(abort))");
-      } else
-      { console.log("Unhandled exception; restarting", rc);
-      }
-    }
-    query.completed();
-  }
-}
 
 
 		 /*******************************
