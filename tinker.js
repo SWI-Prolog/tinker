@@ -784,27 +784,25 @@ export class Console {
 		 *         TINKER QUERY         *
 		 *******************************/
 
-/** Add a structure for a query.  The structure is
- *
- * ```
- * <div class="query-container">
- *   <div class="query-header">?- between(1,3,X).</div
- *   <div class="query-answers">
- *     <div class="query-answer">
- *       <span class="stdout">X = 1;</span>
- *     </div>
- *     <div class="query-answer">
- *       <span class="stdout">X = 2;</span>
- *     </div>
- *     ...
- *   </div>
- * </div>
- * ```
- */
-
+// All possible states for a query.  Used to remove all states.
 const state_classes = [
   "run", "more", "trace", "read", "prompt", "query", "term", "line"
 ];
+
+/**
+ * Enter and control  a Prolog query life cycle.   The Tinker toplevel
+ * adds an instance of this class  to Console.  The query shows itself
+ * as an input  field using the `?-` prompt.  After  the user enters a
+ * Prolog query and hits _Enter_,  the Query instance enters the `run`
+ * state by calling `Prolog.call()`.
+ *
+ * The  `Query` instance  manages the  Prolog execution  based on  the
+ * return  state   from  `Prolog.call()`  using   `Query.next()`.   If
+ * executing the query _yields_, asking  for user input, class `Query`
+ * handles  the interaction  and resumes  the Prolog  execution.  This
+ * process continues  until a  final state  is reached  (final answer,
+ * failure or error).
+ */
 
 export class Query {
   elem;				// div.query-container
@@ -813,9 +811,32 @@ export class Query {
   #state;			// "run", "more", "trace",
 				// "prompt query", "prompt term", "prompt line"
   /**
-   * Create a `<div>` to interact with a new Prolog query
+   * Create a `<div>` to interact with a new Prolog query.
+   * The structure is
    *
-   * @param {string} query is the Prolog query to run
+   * ```
+   * <div class="tinker-query">
+   *   <div class="query-header">
+   *     <span class="query-prompt">?-</span>
+   *     <span class="query-goal">between(1,3,X).</span>
+   *     <span class="query-buttons">...</span>
+   *   </div
+   *   <div class="query-answers">
+   *     <div class="query-answer">
+   *       <span class="stdout">X = 1</span>
+   *     </div>
+   *     <div class="query-answer">
+   *       <span class="stdout">X = 2</span>
+   *     </div>
+   *     ... // more answers
+   *   </div>
+   *   <div> // controls (abort, next/stop, trace, ...)
+   *     <div class="tinker-abort">...</div>
+   *     ...
+   *   </div>
+   * </div>
+   * ```
+   * @param {string} [query] is the Prolog query to run.
    */
   constructor(query) {
     const hdr  = el("div.query-header",
@@ -836,6 +857,10 @@ export class Query {
     this.answer = ans;
   }
 
+  /**
+   * The query as it appears in the title
+   * @type {string}
+   */
   set query(query) {
     const span = this.elem.querySelector("span.query-goal");
     if ( query )
