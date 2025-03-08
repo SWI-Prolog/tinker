@@ -54,7 +54,7 @@ let   tconsole;			// left pane console area
  * selector, (re)consult button and up/download buttons.
  */
 
-class TinkerSource {
+export class TinkerSource {
   files;			// Current and available
   default_file;			// Use scratch file
   user_dir;			// Directory for user files
@@ -62,6 +62,9 @@ class TinkerSource {
   editor;			// TinkerEditor instance
   elem;				// The <form>
 
+  /**
+   * @param {HTMLFormElement} elem Toplevel element used.
+   */
   constructor(elem) {
     const self = this;
     this.elem = elem;
@@ -549,7 +552,7 @@ function el(sel, ...content) {
  * its answer.
  */
 
-window.current_answer = () => {
+export function current_answer() {
   return tconsole.currentAnswer();
 }
 
