@@ -54,12 +54,12 @@ let   tconsole;			// left pane console area
  * selector, (re)consult button and up/download buttons.
  */
 
-export class TinkerSource {
+export class Source {
   files;			// Current and available
   default_file;			// Use scratch file
   user_dir;			// Directory for user files
   select_file;			// File selector
-  editor;			// TinkerEditor instance
+  editor;			// Editor instance
   elem;				// The <form>
 
   /**
@@ -77,7 +77,7 @@ export class TinkerSource {
 
     Module.FS.mkdir(this.user_dir);
 
-    this.editor = new TinkerEditor(this.byname("editor"),
+    this.editor = new Editor(this.byname("editor"),
 				   () => self.afterEditor());
     // Register event handling
     this.armFileSelect();
@@ -401,7 +401,7 @@ export class TinkerSource {
   byname(name) {
     return this.elem.querySelector(`[name=${name}]`);
   }
-} // end class TinkerSource
+} // end class Source
 
 
 		 /*******************************
@@ -416,7 +416,7 @@ export class TinkerSource {
  *   - Go to a line/column
  */
 
-class TinkerEditor {
+export class Editor {
   static cm_url = "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.9";
   static cm_swi = "https://www.swi-prolog.org/download/codemirror";
   CodeMirror;
@@ -433,10 +433,10 @@ class TinkerEditor {
     }
 
     function cm_url(sub) {
-      return TinkerEditor.cm_url + sub;
+      return Editor.cm_url + sub;
     }
     function cm_swi(sub) {
-      return TinkerEditor.cm_swi + sub;
+      return Editor.cm_swi + sub;
     }
 
     require.config({ paths: {
@@ -515,7 +515,7 @@ class TinkerEditor {
 		  }));
     this.cm.on("cursorActivity", clearSearchMarkers);
   }
-} // End class TinkerEditor
+} // End class Editor
 
 function getPromiseFromEvent(item, event) {
   return new Prolog.Promise((resolve) => {
@@ -560,7 +560,7 @@ export function current_answer() {
  * A console is scrollable area that can handle queries.
  */
 
-class TinkerConsole {
+export class Console {
   output;			// element to write in
   current_query;
   history;			// Query history
@@ -617,7 +617,7 @@ class TinkerConsole {
   }
 
   /**
-   * @return {TinkerQuery} Last query displayed on the console.
+   * @return {Query} Last query displayed on the console.
    * `undefined` if there is no last query
    */
   lastQuery() {
@@ -640,7 +640,7 @@ class TinkerConsole {
     if ( open ) {
       open.data.query.input.focus("query");
     } else {
-      const q = new TinkerQuery();
+      const q = new Query();
       this.output.appendChild(q.elem);
       q.read();
     }
@@ -660,7 +660,7 @@ class TinkerConsole {
       if ( !open.input.value.trim() ) {
 	open.run(query);
       } else {
-	const q = new TinkerQuery();
+	const q = new Query();
 	open.elem.parentNode.insertBefore(q.elem, open.elem);
 	q.run(query);
       }
@@ -779,7 +779,7 @@ class TinkerConsole {
 
   /**
    * Find the console instance from a nested element
-   * @return {TinkerConsole}
+   * @return {Console}
    */
   static findConsole(from) {
     const elem = from.closest(".tinker-console");
@@ -814,10 +814,10 @@ const state_classes = [
   "run", "more", "trace", "read", "prompt", "query", "term", "line"
 ];
 
-class TinkerQuery {
+export class Query {
   elem;				// div.query-container
   answer;			// div.query-answer
-  input;			// TinkerInput
+  input;			// Input
   #state;			// "run", "more", "trace",
 				// "prompt query", "prompt term", "prompt line"
   /**
@@ -858,10 +858,10 @@ class TinkerQuery {
 
   /**
    * Console this query belongs to.
-   * @type {TinkerConsole}
+   * @type {Console}
    */
   get console() {
-    return TinkerConsole.findConsole(this.elem);
+    return Console.findConsole(this.elem);
   }
 
   #fillHeader(hdr) {
@@ -888,7 +888,7 @@ class TinkerQuery {
   }
 
   #fillControl(ctrl) {
-    this.input = new TinkerInput();
+    this.input = new Input();
     ctrl.appendChild(this.#createAbort());
     ctrl.appendChild(this.#createMore());
     ctrl.appendChild(this.#createTrace());
@@ -1046,7 +1046,7 @@ class TinkerQuery {
   /**
    * Find the  query before this  one.  Currently, we do  not consider
    * the state of the query.
-   * @return {TinkerQuery}
+   * @return {Query}
    */
   previous() {
     let node = this.elem.previousElementSibling;
@@ -1241,11 +1241,11 @@ class TinkerQuery {
   }
 
   tty_size() {
-    const tconsole = TinkerConsole.findConsole(this.elem);
+    const tconsole = Console.findConsole(this.elem);
     if ( tconsole )
       return tconsole.tty_size();
   }
-} // end class TinkerQuery
+} // end class Query
 
 
 		 /*******************************
@@ -1257,7 +1257,7 @@ class TinkerQuery {
  * query, read/1 and friends and reading a line of input.
  */
 
-class TinkerInput {
+export class Input {
   elem;
   target;			// "query", "term", or "line"
 
@@ -1307,7 +1307,7 @@ class TinkerInput {
       }
 
       if ( this.target == "query" ) {
-	const con = TinkerConsole.findConsole(this.elem);
+	const con = Console.findConsole(this.elem);
 	con.pushHistory(query);
       }
     }
@@ -1349,7 +1349,7 @@ class TinkerInput {
       switch(event.key)
       { case "ArrowUp":
 	case "ArrowDown":
-	{ const con = TinkerConsole.findConsole(this.elem);
+	{ const con = Console.findConsole(this.elem);
 	  let val;
 
 	  if( event.key === "ArrowUp" )
@@ -1415,7 +1415,7 @@ class TinkerInput {
       }
     });
   }
-} // end class TinkerInput
+} // end class Input
 
 		 /*******************************
 		 *            TRACER            *
@@ -1441,7 +1441,7 @@ const trace_shortcuts = {
 		 *        PERSIST FILES         *
 		 *******************************/
 
-class Persist {
+export class Persist {
   map;				// key -> object
 
   constructor() {
@@ -1588,12 +1588,12 @@ var options = {
 };
 
 persist  = new Persist();
-tconsole = new TinkerConsole(document.querySelector("div.console"));
+tconsole = new Console(document.querySelector("div.console"));
 
 SWIPL(options).then(async (module) => {
   Module = module;
   Prolog = Module.prolog;
-  window.source = source = new TinkerSource(
+  window.source = source = new Source(
     document.querySelector("form[name=source]"));
   await Prolog.load_scripts();
   await Prolog.consult("tinker.pl", {module:"system"});
