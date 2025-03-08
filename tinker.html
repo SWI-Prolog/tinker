@@ -100,6 +100,22 @@
 
 <!-- Glue it all together -->
 <script type="module" src="tinker.js"></script>
+<script>
+  // Some global functions that can be used to demonstrate calling
+  // JavaScript
+
+  // Use as `?- X := add_one(1)`
+  add_one = (n) => n+1;
+  
+  // Use as `?- await promise_any(42)`
+  promise_any = (data) => {
+    console.log(data);
+    
+    return new Promise(function(resolve, reject) {
+      resolve(data);
+    });
+  }
+</script>
 
 </body>
 </html>

@@ -1598,17 +1598,3 @@ SWIPL(options).then(async (module) => {
   Prolog.call("version");
   tconsole.addQuery();
 });
-
-		 /*******************************
-		 *          DEMO CALLS          *
-		 *******************************/
-
-window.add_one = (n) => n+1;
-
-window.promise_any = (data) =>
-{ console.log(data);
-
-  return new Promise(function(resolve, reject)
-  { resolve(data);
-  });
-}
