@@ -677,7 +677,7 @@ class TinkerConsole {
       return q.answer;
   }
 
-  __getCharSize(element) {
+  #getCharSize(element) {
     if ( !element.char_size )
     { let temp = document.createElement("span");
       temp.className = "stdout";
@@ -697,7 +697,7 @@ class TinkerConsole {
    */
   tty_size() {
     const wrapper = this.elem.closest("div.scroll-wrapper");
-    const charsz = this.__getCharSize(this.output);
+    const charsz = this.#getCharSize(this.output);
     return [ Math.floor(wrapper.clientHeight/charsz.h),
 	     Math.floor(wrapper.clientWidth/charsz.w)
 	   ];
@@ -834,8 +834,8 @@ class TinkerQuery {
 		   hdr, ansl, ctrl);
     this.elem.data = { query: this };
 
-    this.__fillHeader(hdr);
-    this.__fillControl(ctrl);
+    this.#fillHeader(hdr);
+    this.#fillControl(ctrl);
 
     this.query = query;
     this.answer = ans;
@@ -861,7 +861,7 @@ class TinkerQuery {
     return TinkerConsole.findConsole(this.elem);
   }
 
-  __fillHeader(hdr) {
+  #fillHeader(hdr) {
     const self = this;
     const edit  = el("span", "\u270E");
     const close = el("span", "\u2715");
@@ -884,16 +884,16 @@ class TinkerQuery {
     icon.addEventListener("click", () => self.collapsed());
   }
 
-  __fillControl(ctrl) {
+  #fillControl(ctrl) {
     this.input = new TinkerInput();
-    ctrl.appendChild(this.__createAbort());
-    ctrl.appendChild(this.__createMore());
-    ctrl.appendChild(this.__createTrace());
-    ctrl.appendChild(this.__createKbd());
+    ctrl.appendChild(this.#createAbort());
+    ctrl.appendChild(this.#createMore());
+    ctrl.appendChild(this.#createTrace());
+    ctrl.appendChild(this.#createKbd());
     ctrl.appendChild(this.input.elem);
   }
 
-  __createAbort() {
+  #createAbort() {
     const btn = el("button", "Abort");
     const abort = el("div.tinker-abort", btn);
 
@@ -915,7 +915,7 @@ class TinkerQuery {
    * Fill the  input elements that  control user interaction  after an
    * answer has been found.
    */
-  __createMore() {
+  #createMore() {
     const self = this;
     const next = el("button.more-next", "Next");
     const stop = el("button.more-cont", "Stop");
@@ -940,7 +940,7 @@ class TinkerQuery {
     btn.focus();
   }
 
-  __createTrace() {
+  #createTrace() {
     const self = this;
     function button(action, title, label) {
       const btn = el(`button.${action}`, label);
@@ -977,7 +977,7 @@ class TinkerQuery {
     btn.focus();
   }
 
-  __createKbd() {
+  #createKbd() {
     const div = el("div.tinker-keyboard",
 		   "⌨️",
 		   el("span", "waiting for a key"));
