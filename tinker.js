@@ -33,29 +33,20 @@
 */
 
 		 /*******************************
-		 *   CONSTANTS AND COMPONENTS   *
+		 *          COMPONENTS          *
 		 *******************************/
 
-const user_dir      = "/prolog"
-const default_file  = `${user_dir}/scratch.pl`;
-let   files	    = { current: default_file,
-			list: [default_file]
-		      };
+const config = {
+  user_dir: "/prolog",
+  default_file_name: "scratch.pl"
+};
 
 let   persist;			// Persistence management
-let   tconsole;			// left pane console area
 let   source;			// right pane (editor + file actions)
+let   tconsole;			// left pane console area
 
 let   waitfor	    = null;
 let   abort_request = false;
-
-function user_file(file)
-{ return `${user_dir}/${file}`;
-}
-
-function is_user_file(file)
-{ return file.startsWith(`${user_dir}/`);
-}
 
 		 /*******************************
 		 *            SOURCE            *
@@ -67,6 +58,9 @@ function is_user_file(file)
  */
 
 class TinkerSource {
+  files;			// Current and available
+  default_file;			// Use scratch file
+  user_dir;			// Directory for user files
   select_file;			// File selector
   editor;			// TinkerEditor instance
   elem;				// The <form>
@@ -74,9 +68,18 @@ class TinkerSource {
   constructor(elem) {
     const self = this;
     this.elem = elem;
+    this.user_dir = config.user_dir;
+    this.default_file = `${this.user_dir}/${config.default_file_name}`
+    this.files = { current: this.default_file,
+		   list: [this.default_file]
+		 };
     this.select_file = this.byname("select-file");
+
+    Module.FS.mkdir(this.user_dir);
+
     this.editor = new TinkerEditor(this.byname("editor"),
 				   () => self.afterEditor());
+    // Register event handling
     this.armFileSelect();
     this.armNewFileButton();
     this.armFileCreateButton();
@@ -160,12 +163,12 @@ class TinkerSource {
       e.selected = e.value == name;
     });
 
-    if ( files.current != name ) {
-      if ( files.current )
-	persist.saveFile(files.current);
-      files.current = name;
-      if ( !files.list.includes(name) )
-	files.list.push(name);
+    if ( this.files.current != name ) {
+      if ( this.files.current )
+	persist.saveFile(this.files.current);
+      this.files.current = name;
+      if ( !this.files.list.includes(name) )
+	this.files.list.push(name);
       persist.loadFile(name);
       this.updateDownload(name);
     }
@@ -190,7 +193,7 @@ class TinkerSource {
       to = default_file;
     this.switchToFile(to.value);
     opt.parentNode.removeChild(opt);
-    files.list = files.list.filter((n) => (n != file));
+    this.files.list = this.files.list.filter((n) => (n != file));
     localStorage.removeItem(file);
     Module.FS.unlink(file);
   }
@@ -277,7 +280,7 @@ class TinkerSource {
 	e.preventDefault();
 	const del = this.currentFileOption().value;
 
-	if ( del == default_file )
+	if ( del == this.default_file )
 	{ alert("Cannot delete the default file");
 	  return;
 	}
@@ -352,8 +355,8 @@ class TinkerSource {
   armConsult() {
     this.elem.addEventListener('submit', (e) => {
       e.preventDefault();
-      persist.saveFile(files.current);
-      tconsole.injectQuery(`consult('${files.current}').`);
+      persist.saveFile(this.files.current);
+      tconsole.injectQuery(`consult('${this.files.current}').`);
     }, false);
   }
 
@@ -371,18 +374,30 @@ class TinkerSource {
     });
   }
 
-  userFile(file) {
-    return `${user_dir}/${file}`;
+  /**
+   * @return {string}  full path  name of  a user  file from  the base
+   * name.
+   */
+  userFile(base) {
+    return `${this.user_dir}/${base}`;
   }
 
+  /**
+   * @return {bool} `true` when `file` is a _user file_.
+   */
   isUserFile(file) {
-    return file.startsWith(`${user_dir}/`);
+    return file.startsWith(`${this.user_dir}/`);
   }
 
   baseName(path) {
     return path.split("/").pop();
   }
 
+  /**
+   * Find one of my components by its name.
+   * @param {string} name Name of the component to find.
+   * @return {HTMLElement} Element with that name;
+   */
   byname(name) {
     return this.elem.querySelector(`[name=${name}]`);
   }
@@ -842,7 +857,8 @@ class TinkerQuery {
   }
 
   /**
-   * @type {TinkerConsole} Console this query belongs to.
+   * Console this query belongs to.
+   * @type {TinkerConsole}
    */
   get console() {
     return TinkerConsole.findConsole(this.elem);
@@ -1445,7 +1461,7 @@ class Persist {
    *
    * @param {string} name the localStorage key
    * @param {object} into JavaScript object filled
-   * @param {Array[string]} [keys] Keys of `into` that must be saved.
+   * @param {string[]} [keys] Keys of `into` that must be saved.
    * Defaults to the keys of `into`.
    */
   load(name, into, keys) {
@@ -1479,30 +1495,30 @@ class Persist {
   restoreFile(name)
   { const content = localStorage.getItem(name)||"";
 
-    if ( content || name == default_file )
+    if ( content || name == source.default_file )
     { Module.FS.writeFile(name, content);
       source.addFileOption(name);
     } else
-    { files.list = files.list.filter((n) => (n != name));
+    { source.files.list = source.files.list.filter((n) => (n != name));
     }
   }
 
   restoreFiles()
   { const self = this;
     let f = localStorage.getItem("files");
-    if ( f ) files = JSON.parse(f);
+    if ( f ) source.files = JSON.parse(f);
 
-    files.list.forEach((f) => self.restoreFile(f));
-    if ( !files.list.includes(default_file) )
-      files.list.unshift(default_file);
+    source.files.list.forEach((f) => self.restoreFile(f));
+    if ( !source.files.list.includes(source.default_file) )
+      source.files.list.unshift(source.default_file);
 
-    let current = files.current;
-    files.current = null;
-    source.switchToFile(current || default_file);
+    let current = source.files.current;
+    source.files.current = null;
+    source.switchToFile(current || source.default_file);
   }
 
   loadFile(name)
-  { name = name || files.current;
+  { name = name || source.files.current;
 
     try
     { let content = Module.FS.readFile(name, { encoding: 'utf8' });
@@ -1513,13 +1529,13 @@ class Persist {
   }
 
   saveFile(name, force)
-  { if ( force || is_user_file(name) )
+  { if ( force || source.isUserFile(name) )
     { Module.FS.writeFile(name, source.value);
     }
   }
 
   persistsFile(name)
-  { if ( is_user_file(name) )
+  { if ( source.userFile(name) )
     { try
       { let content = Module.FS.readFile(name, { encoding: 'utf8' });
 	localStorage.setItem(name, content);
@@ -1530,10 +1546,11 @@ class Persist {
   }
 
   persistFiles()
-  { const l = files.list.filter((n) => is_user_file(n));
+  { const l = source.files.list.filter((n) => source.isUserFile(n));
     const save =
 	  { list: l,
-	    current: l.includes(files.current) ? files.current : default_file
+	    current: l.includes(source.files.current) ? source.files.current
+						      : source.default_file
 	  };
 
     localStorage.setItem("files", JSON.stringify(save));
@@ -1575,14 +1592,13 @@ tconsole = new TinkerConsole(document.querySelector("div.console"));
 SWIPL(options).then(async (module) => {
   Module = module;
   Prolog = Module.prolog;
-  Module.FS.mkdir(user_dir);
-  await Prolog.load_scripts();
-  await Prolog.consult("tinker.pl", {module:"system"});
-  Prolog.query("tinker:tinker_init(Dir)", {Dir:user_dir}).once();
-  Prolog.call("version");
-  tconsole.addQuery();
   window.source = source = new TinkerSource(
     document.querySelector("form[name=source]"));
+  await Prolog.load_scripts();
+  await Prolog.consult("tinker.pl", {module:"system"});
+  Prolog.query("tinker:tinker_init(Dir)", {Dir:source.user_dir}).once();
+  Prolog.call("version");
+  tconsole.addQuery();
 });
 
 		 /*******************************

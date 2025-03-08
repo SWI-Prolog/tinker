@@ -16,7 +16,7 @@
 %   Tinker itself.
 
 cls :-
-    thinker_query(Q),
+    tinker_query(Q),
     _ := Q.console.clear().
 
 %!  html
