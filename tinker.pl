@@ -110,15 +110,15 @@ prolog_edit:edit_source(Spec) :-
 edit_source(Spec) :-
     memberchk(file(File), Spec),
     load_file(File, String),
-    _ := source.addFileOption(#File),
-    _ := source.switchToFile(#File),
-    source.value := String,
+    _ := tinker.source.addFileOption(#File),
+    _ := tinker.source.switchToFile(#File),
+    tinker.source.value := String,
     (   memberchk(line(Line), Spec)
     ->  (   memberchk(linepos(LinePos), Spec)
         ->  Options = _{linepos:LinePos}
         ;   Options = _{}
         ),
-        _ := source.goto(Line, Options)
+        _ := tinker.source.goto(Line, Options)
     ;   true
     ).
 
@@ -410,7 +410,8 @@ html(Term) :-
     Div := document.createElement("div"),
     Div.className := "write",
     Div.innerHTML := HTML,
-    _ := current_answer().appendChild(Div).
+    tinker_query(Q),
+    _ := Q.answer.appendChild(Div).
 
 
                 /*******************************

@@ -33,7 +33,8 @@ html(Term) :-
     with_output_to(string(HTML), print_html(Tokens)),
     Div := document.createElement("div"),
     Div.innerHTML := HTML,
-    _ := current_answer().appendChild(Div).
+    tinker_query(Q),
+    _ := Q.answer.appendChild(Div).
 
 %!  flag_table
 %

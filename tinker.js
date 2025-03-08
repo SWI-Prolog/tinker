@@ -41,9 +41,9 @@ const config = {
   default_file_name: "scratch.pl"
 };
 
-let   persist;			// Persistence management
-let   source;			// right pane (editor + file actions)
-let   tconsole;			// left pane console area
+let        persist;		// Persistence management
+export let source;		// right pane (editor + file actions)
+let	   tconsole;		// left pane console area
 
 		 /*******************************
 		 *            SOURCE            *
@@ -547,14 +547,6 @@ function el(sel, ...content) {
 		 /*******************************
 		 *       OUTPUT STRUCTURE       *
 		 *******************************/
-
-/** @return {HTMLDivElement} in which the current query should dump
- * its answer.
- */
-
-export function current_answer() {
-  return tconsole.currentAnswer();
-}
 
 /**
  * A console is scrollable area that can handle queries.
@@ -1593,8 +1585,7 @@ tconsole = new Console(document.querySelector("div.console"));
 SWIPL(options).then(async (module) => {
   Module = module;
   Prolog = Module.prolog;
-  window.source = source = new Source(
-    document.querySelector("form[name=source]"));
+  source = new Source(document.querySelector("form[name=source]"));
   await Prolog.load_scripts();
   await Prolog.consult("tinker.pl", {module:"system"});
   Prolog.query("tinker:tinker_init(Dir)", {Dir:source.user_dir}).once();
