@@ -185,8 +185,7 @@ export class Source {
     });
 
     if ( this.files.current != name ) {
-      if ( this.files.current )
-	this.persist.saveFile(this.files.current);
+      this.ensureSavedCurrentFile();
       this.files.current = name;
       if ( !this.files.list.includes(name) )
 	this.files.list.push(name);
@@ -215,7 +214,7 @@ export class Source {
     this.switchToFile(to.value);
     opt.parentNode.removeChild(opt);
     this.files.list = this.files.list.filter((n) => (n != file));
-    localStorage.removeItem(file);
+    this.persist.removeFile(file);
     Module.FS.unlink(file);
   }
 
@@ -348,7 +347,7 @@ export class Source {
       this.addFileOption(name);
       this.switchToFile(name);
       this.value = content;
-      this.persist.saveFile(name);
+      this.ensureSavedCurrentFile();
     }
   }
 
@@ -369,6 +368,15 @@ export class Source {
     }
   }
 
+  ensureSavedCurrentFile() {
+    const file = this.files.current;
+    if ( file ) {
+      if ( this.isUserFile(file) )
+	Module.FS.writeFile(file, this.value);
+      return file;
+    }
+  }
+
   /**
    * Arm the form submit button.
    */
@@ -376,8 +384,8 @@ export class Source {
   armConsult() {
     this.elem.addEventListener('submit', (e) => {
       e.preventDefault();
-      this.persist.saveFile(this.files.current);
-      tconsole.injectQuery(`consult('${this.files.current}').`);
+      const file = this.ensureSavedCurrentFile();
+      tconsole.injectQuery(`consult('${file}').`); // TODO: quote
     }, false);
   }
 
@@ -1493,19 +1501,46 @@ const trace_shortcuts = {
 		 *        PERSIST FILES         *
 		 *******************************/
 
+/**
+ * Provide persistency of files and  query history using the browser's
+ * `localStorage` facility.  localStorage keys are:
+ *
+ *  - `<prefix>/history`
+ *  - `<prefix>/files`
+ *  - `<prefix>/file/<name>`
+ */
+
 export class Persist {
+  autosave;			// Save on exit
   map;				// key -> object
   source;			// Associated Source instance
+  prefix;			// Key prefix
 
-  constructor() {
+  /**
+   * @param {object} [options]
+   * @param {string} [options.prefix] Prefix for all keys.  Default is
+   * `"/tinker/"`
+   */
+  constructor(options) {
     const self = this;
-    this.autosave = true;
+
+    options = options|{};
+    this.autosave = options.autosave !== undefined ? options.autosave : true;
+    this.prefix = options.prefix !== undefined ? options.prefix : "/tinker/";
     this.map = {};
 
     window.addEventListener("visibilitychange", () => {
       if ( document.hidden && this.autosave )
 	self.persist();
     });
+  }
+
+  itemKey(name) {
+    return `${this.prefix}${name}`;
+  }
+
+  fileKey(name) {
+    return `${this.prefix}file${name}`;
   }
 
   /**
@@ -1522,7 +1557,7 @@ export class Persist {
     this.map[name] = { data: into,
 		       keys: keys||Object.keys(into)
 		     };
-    const item = localStorage.getItem(name);
+    const item = localStorage.getItem(this.itemKey(name));
     if ( item ) {
       const obj = JSON.parse(item);
       for(let k of keys) {
@@ -1542,24 +1577,29 @@ export class Persist {
       for( let key of this.map[k].keys ) {
 	save[key] = data[key];
       }
-      localStorage.setItem(k, JSON.stringify(save));
+      localStorage.setItem(this.itemKey(k), JSON.stringify(save));
     }
   }
 
+  removeFile(name) {
+    localStorage.removeItem(this.fileKey(name));
+  }
+
   restoreFile(name)
-  { const content = localStorage.getItem(name)||"";
+  { const content = localStorage.getItem(this.fileKey(name))||"";
 
     if ( content || name == this.source.default_file )
     { Module.FS.writeFile(name, content);
       this.source.addFileOption(name);
     } else
-    { this.source.files.list = this.source.files.list.filter((n) => (n != name));
+    { this.source.files.list = this.source.files.list
+				.filter((n) => (n != name));
     }
   }
 
   restoreFiles()
   { const self = this;
-    let f = localStorage.getItem("files");
+    let f = localStorage.getItem(this.itemKey("files"));
     if ( f ) this.source.files = JSON.parse(f);
 
     this.source.files.list.forEach((f) => self.restoreFile(f));
@@ -1582,43 +1622,42 @@ export class Persist {
     }
   }
 
-  saveFile(name, force)
-  { if ( force || this.source.isUserFile(name) )
-    { Module.FS.writeFile(name, this.source.value);
-    }
-  }
-
   persistsFile(name)
   { if ( this.source.userFile(name) )
     { try
       { let content = Module.FS.readFile(name, { encoding: 'utf8' });
-	localStorage.setItem(name, content);
+	localStorage.setItem(this.fileKey(name), content);
       } catch(e)
-      { localStorage.removeItem(name);
+      { localStorage.removeItem(this.fileKey(name));
       }
     }
   }
 
-  persistFiles()
-  { const l = this.source.files.list.filter((n) => this.source.isUserFile(n));
+  persistFiles() {
+    this.source.ensureSavedCurrentFile();
+
+    const l = this.source.files.list.filter((n) => this.source.isUserFile(n));
     const save =
 	  { list: l,
-	    current: l.includes(this.source.files.current) ? this.source.files.current
-						      : this.source.default_file
+	    current: l.includes(this.source.files.current)
+		? this.source.files.current
+		: this.source.default_file
 	  };
 
-    localStorage.setItem("files", JSON.stringify(save));
+    localStorage.setItem(this.itemKey("files"), JSON.stringify(save));
 
     save.list.forEach((f) => this.persistsFile(f));
   }
 
-  persist()
-  { this.persistRegistered();
-    this.persistFiles();
+  persist() {
+    this.persistRegistered();
+    if ( this.source )
+      this.persistFiles();
   }
 
-  restore()
-  { this.restoreFiles();
+  restore() {
+    if ( this.source )
+      this.restoreFiles();
   }
 }
 
