@@ -86,6 +86,7 @@ export class Source {
     opts = opts||{};
 
     this.persist = opts.persist||new Persist();
+    this.persist.source = this;
     this.user_dir = opts.user_dir||"/prolog";
     this.default_file =
       `${this.user_dir}/${opts.default_file_name||"scratch.pl"}`
@@ -1494,6 +1495,7 @@ const trace_shortcuts = {
 
 export class Persist {
   map;				// key -> object
+  source;			// Associated Source instance
 
   constructor() {
     const self = this;
@@ -1547,47 +1549,47 @@ export class Persist {
   restoreFile(name)
   { const content = localStorage.getItem(name)||"";
 
-    if ( content || name == source.default_file )
+    if ( content || name == this.source.default_file )
     { Module.FS.writeFile(name, content);
-      source.addFileOption(name);
+      this.source.addFileOption(name);
     } else
-    { source.files.list = source.files.list.filter((n) => (n != name));
+    { this.source.files.list = this.source.files.list.filter((n) => (n != name));
     }
   }
 
   restoreFiles()
   { const self = this;
     let f = localStorage.getItem("files");
-    if ( f ) source.files = JSON.parse(f);
+    if ( f ) this.source.files = JSON.parse(f);
 
-    source.files.list.forEach((f) => self.restoreFile(f));
-    if ( !source.files.list.includes(source.default_file) )
-      source.files.list.unshift(source.default_file);
+    this.source.files.list.forEach((f) => self.restoreFile(f));
+    if ( !this.source.files.list.includes(this.source.default_file) )
+      this.source.files.list.unshift(this.source.default_file);
 
-    let current = source.files.current;
-    source.files.current = null;
-    source.switchToFile(current || source.default_file);
+    let current = this.source.files.current;
+    this.source.files.current = null;
+    this.source.switchToFile(current || this.source.default_file);
   }
 
   loadFile(name)
-  { name = name || source.files.current;
+  { name = name || this.source.files.current;
 
     try
     { let content = Module.FS.readFile(name, { encoding: 'utf8' });
-      source.value = content;
+      this.source.value = content;
     } catch(e)
-    { source.value = "";
+    { this.source.value = "";
     }
   }
 
   saveFile(name, force)
-  { if ( force || source.isUserFile(name) )
-    { Module.FS.writeFile(name, source.value);
+  { if ( force || this.source.isUserFile(name) )
+    { Module.FS.writeFile(name, this.source.value);
     }
   }
 
   persistsFile(name)
-  { if ( source.userFile(name) )
+  { if ( this.source.userFile(name) )
     { try
       { let content = Module.FS.readFile(name, { encoding: 'utf8' });
 	localStorage.setItem(name, content);
@@ -1598,11 +1600,11 @@ export class Persist {
   }
 
   persistFiles()
-  { const l = source.files.list.filter((n) => source.isUserFile(n));
+  { const l = this.source.files.list.filter((n) => this.source.isUserFile(n));
     const save =
 	  { list: l,
-	    current: l.includes(source.files.current) ? source.files.current
-						      : source.default_file
+	    current: l.includes(this.source.files.current) ? this.source.files.current
+						      : this.source.default_file
 	  };
 
     localStorage.setItem("files", JSON.stringify(save));
