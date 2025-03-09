@@ -61,15 +61,34 @@ export class Source {
   select_file;			// File selector
   editor;			// Editor instance
   elem;				// The <form>
+  persist;			// Persist instance
 
   /**
+   * Create the Tinker source file  manager from an DOM structure that
+   * contains the  various components.  Components are  found by name.
+   * Most  components are  optional, not  providing the  functionality
+   * when missing.
+   *
    * @param {HTMLFormElement} elem Toplevel element used.
+   * @param {object} [options] Options processed.
+   * @param {string} [options.user_dir] Working directory where user
+   * files are placed.  Defaults to `"/prolog"`.
+   * @param {string} [options.default_file_name] Default (scratch)
+   * file.  Defaults to `"scratch.pl"`
+   * @param {Persist} [options.persist] Persistency manager.  Defaults
+   * to `new Persist()`.
    */
-  constructor(elem) {
+  constructor(elem, opts) {
     const self = this;
     this.elem = elem;
-    this.user_dir = config.user_dir;
-    this.default_file = `${this.user_dir}/${config.default_file_name}`
+    elem.data = {instance: this};
+
+    opts = opts||{};
+
+    this.persist = opts.persist||new Persist();
+    this.user_dir = opts.user_dir||"/prolog";
+    this.default_file =
+      `${this.user_dir}/${opts.default_file_name||"scratch.pl"}`
     this.files = { current: this.default_file,
 		   list: [this.default_file]
 		 };
@@ -90,6 +109,7 @@ export class Source {
   }
 
   afterEditor() {
+    this.persist.restore();
     this.addExamples();
   }
 
@@ -165,11 +185,11 @@ export class Source {
 
     if ( this.files.current != name ) {
       if ( this.files.current )
-	persist.saveFile(this.files.current);
+	this.persist.saveFile(this.files.current);
       this.files.current = name;
       if ( !this.files.list.includes(name) )
 	this.files.list.push(name);
-      persist.loadFile(name);
+      this.persist.loadFile(name);
       this.updateDownload(name);
     }
   }
@@ -327,7 +347,7 @@ export class Source {
       this.addFileOption(name);
       this.switchToFile(name);
       this.value = content;
-      persist.saveFile(name);
+      this.persist.saveFile(name);
     }
   }
 
@@ -355,7 +375,7 @@ export class Source {
   armConsult() {
     this.elem.addEventListener('submit', (e) => {
       e.preventDefault();
-      persist.saveFile(this.files.current);
+      this.persist.saveFile(this.files.current);
       tconsole.injectQuery(`consult('${this.files.current}').`);
     }, false);
   }
@@ -452,7 +472,6 @@ export class Editor {
 	    ], (cm) => {
 	      this.CodeMirror = cm;
 	      this.createCM(container);
-	      persist.restore();
 	      cont.call(this.cm);
 	    });
 
@@ -556,11 +575,25 @@ export class Console {
   output;			// element to write in
   current_query;
   history;			// Query history
+  persist;			// (History) persistency
 
-  constructor(elem) {
+  /**
+   * Create a Tinker console.
+   * @param {HTMLDivElement} elem Element that is wrapped to
+   * provide a scrollable area and prepared for addding
+   * instances of `Query`.
+   * @param {object} [options]
+   * @param {Persist} [options.persist] `Persist` instance used to load
+   * the command line history.   When omitted, the history is not saved.
+   */
+  constructor(elem, options) {
     this.elem = elem;
-    elem.data = {instance: this};
     elem.classList.add("tinker-console");
+    elem.data = {instance: this};
+
+    options = options||{};
+    this.persist = options.persist;
+
     this.output = el("div.output");
     const wrapper = el("div.scroll-wrapper",
 		       el("span.scroll-start-at-top"));
@@ -575,7 +608,8 @@ export class Console {
       stack: [],
       current: null
     };
-    persist.load("history", this.history, ["stack"]);
+    if ( this.persist )
+      this.persist.load("history", this.history, ["stack"]);
   }
 
   pushHistory(line) {
@@ -1605,12 +1639,16 @@ var options = {
 };
 
 persist  = new Persist();
-tconsole = new Console(document.querySelector("div.console"));
+tconsole = new Console(document.querySelector("div.console"),
+		       { persist: persist
+		       });
 
 SWIPL(options).then(async (module) => {
   Module = module;
   Prolog = Module.prolog;
-  source = new Source(document.querySelector("form[name=source]"));
+  source = new Source(document.querySelector("form[name=source]"),
+		      { persist: persist
+		      });
   await Prolog.load_scripts();
   await Prolog.consult("tinker.pl", {module:"system"});
   Prolog.query("tinker:tinker_init(Dir)", {Dir:source.user_dir}).once();
