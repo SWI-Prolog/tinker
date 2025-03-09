@@ -41,10 +41,6 @@ const config = {
   default_file_name: "scratch.pl"
 };
 
-let        persist;		// Persistence management
-export let source;		// right pane (editor + file actions)
-let	   tconsole;		// left pane console area
-
 		 /*******************************
 		 *            SOURCE            *
 		 *******************************/
@@ -62,6 +58,7 @@ export class Source {
   editor;			// Editor instance
   elem;				// The <form>
   persist;			// Persist instance
+  con;				// Console instance
 
   /**
    * Create the Tinker source file  manager from an DOM structure that
@@ -77,6 +74,8 @@ export class Source {
    * file.  Defaults to `"scratch.pl"`
    * @param {Persist} [options.persist] Persistency manager.  Defaults
    * to `new Persist()`.
+   * @param {Console} [options.console] Console into which to inject
+   * queries.
    */
   constructor(elem, opts) {
     const self = this;
@@ -87,6 +86,7 @@ export class Source {
 
     this.persist = opts.persist||new Persist();
     this.persist.source = this;
+    this.con = opts.console;
     this.user_dir = opts.user_dir||"/prolog";
     this.default_file =
       `${this.user_dir}/${opts.default_file_name||"scratch.pl"}`
@@ -385,7 +385,7 @@ export class Source {
     this.elem.addEventListener('submit', (e) => {
       e.preventDefault();
       const file = this.ensureSavedCurrentFile();
-      tconsole.injectQuery(`consult('${file}').`); // TODO: quote
+      this.con.injectQuery(`consult('${file}').`); // TODO: quote
     }, false);
   }
 
@@ -1301,9 +1301,9 @@ export class Query {
   }
 
   tty_size() {
-    const tconsole = Console.findConsole(this.elem);
-    if ( tconsole )
-      return tconsole.tty_size();
+    const con = Console.findConsole(this.elem);
+    if ( con )
+      return con.tty_size();
   }
 } // end class Query
 
@@ -1666,7 +1666,7 @@ export class Persist {
 		 *******************************/
 
 function print_output(line, cls, sgr) {
-  tconsole.print(line, cls, sgr);
+  Prolog.console.print(line, cls, sgr);
 }
 
 let Prolog;
@@ -1679,20 +1679,34 @@ var options = {
   on_output: print_output
 };
 
-persist  = new Persist();
-tconsole = new Console(document.querySelector("div.console"),
-		       { persist: persist
-		       });
+class Tinker {
+  persist;
+  console;
+  source;
+
+  constructor() {
+    this.persist = new Persist();
+    this.console = new Console(document.querySelector("div.console"),
+			       { persist: this.persist
+			       });
+    this.source  = new Source(document.querySelector("form[name=source]"),
+			      { persist: this.persist,
+				console: this.console
+			      });
+    Prolog.console = this.console;
+
+    Prolog.consult("tinker.pl", {module:"system"}).then(() => {
+      Prolog.query("tinker:tinker_init(Dir)",
+		   {Dir:this.source.user_dir}).once();
+      Prolog.call("version");
+      this.console.addQuery();
+    });
+  }
+}
 
 SWIPL(options).then(async (module) => {
   Module = module;
   Prolog = Module.prolog;
-  source = new Source(document.querySelector("form[name=source]"),
-		      { persist: persist
-		      });
   await Prolog.load_scripts();
-  await Prolog.consult("tinker.pl", {module:"system"});
-  Prolog.query("tinker:tinker_init(Dir)", {Dir:source.user_dir}).once();
-  Prolog.call("version");
-  tconsole.addQuery();
+  new Tinker();
 });
