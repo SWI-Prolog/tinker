@@ -32,9 +32,12 @@
     POSSIBILITY OF SUCH DAMAGE.
 */
 
-:- module(tinker, [ cls/0,          %
-                        html/1          % +HTMLTerm
-                      ]).
+:- module(tinker,
+          [ cls/0,		%
+            html/1,		% +HTMLTerm
+            tinker_run/2,	% +TinkerQuery, :QueryString
+            tinker_query/1      % -TinkerQuery
+          ]).
 :- use_module(library(wasm)).
 :- use_module(library(prolog_wrap), [wrap_predicate/4]).
 :- use_module(library(ansi_term), []).
@@ -54,7 +57,8 @@
 :- autoload(library(lists), [append/3]).
 
 :- meta_predicate
-    html(:).
+    html(:),
+    tinker_run(+, :).
 
 % imported from library(wasm).  This enables development.
 :- op(700, xfx, :=).           % Result := Expression
@@ -67,6 +71,8 @@
     trace_action/2,
     complete_input/4.
 
+%!  tinker_init(+UserDir)
+
 tinker_init(UserDir) :-
     set_prolog_flag(tty_control, true),
     set_prolog_flag(color_term, true),
@@ -75,6 +81,21 @@ tinker_init(UserDir) :-
     set_stream(user_output, tty(true)),
     set_stream(user_error, tty(true)),
     working_directory(_, UserDir).
+
+%!  tinker_run(+TinkerQuery, :Query:string)
+
+tinker_run(TinkerQuery, Query) :-
+    setup_call_cleanup(
+        nb_setval(tinker_query, TinkerQuery),
+        wasm_query(Query),
+        nb_delete(tinker_query)).
+
+%!  tinker_query(-TinkerQuery) is det.
+%
+%   TinkerQuery is the JavaScript object running this query.
+
+tinker_query(TinkerQuery) :-
+    nb_current(tinker_query, TinkerQuery).
 
 :- multifile prolog_edit:edit_source/1.
 
@@ -89,15 +110,15 @@ prolog_edit:edit_source(Spec) :-
 edit_source(Spec) :-
     memberchk(file(File), Spec),
     load_file(File, String),
-    _ := addFileOption(#File),
-    _ := switchToFile(#File),
-    _ := cm.setValue(String),
+    _ := tinker.source.addFileOption(#File),
+    _ := tinker.source.switchToFile(#File),
+    tinker.source.value := String,
     (   memberchk(line(Line), Spec)
     ->  (   memberchk(linepos(LinePos), Spec)
         ->  Options = _{linepos:LinePos}
         ;   Options = _{}
         ),
-        _ := cm_goto(cm, Line, Options)
+        _ := tinker.source.goto(Line, Options)
     ;   true
     ).
 
@@ -203,11 +224,16 @@ dbg_backtrace(Frame, Depth) :-
 
 :- abolish(system:get_single_char/1).
 system:get_single_char(Code) :-
-    Promise := get_single_char(),
-    await(Promise, Code).
+    tinker_query(Q),
+    Promise := Q.get_single_char(),
+    (   integer(Promise)                % typically -1 for error
+    ->  Code = Promise
+    ;   await(Promise, Code)
+    ).
 
 system:tty_size(Rows, Columns) :-
-    [Rows,Columns] := tty_size().
+    tinker_query(Q),
+    [Rows,Columns] := Q.tty_size().
 
 reading_tty :-
     current_input(Input),
@@ -368,7 +394,8 @@ complete_input(Before,After,Delete,Completions) :-
 %   Clear the output window.
 
 cls :-
-    document.getElementById("output").innerHTML := "".
+    tinker_query(Q),
+    _ := Q.console.clear().
 
 %!  html(:Term)
 %
@@ -383,7 +410,8 @@ html(Term) :-
     Div := document.createElement("div"),
     Div.className := "write",
     Div.innerHTML := HTML,
-    _ := current_answer().appendChild(Div).
+    tinker_query(Q),
+    _ := Q.answer.appendChild(Div).
 
 
                 /*******************************

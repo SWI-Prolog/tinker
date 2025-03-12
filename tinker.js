@@ -33,169 +33,522 @@
 */
 
 		 /*******************************
-		 *   CONSTANTS AND COMPONENTS   *
+		 *          COMPONENTS          *
 		 *******************************/
 
-const user_dir      = "/prolog"
-const default_file  = `${user_dir}/scratch.pl`;
-
-const terminal	    = document.getElementById('console');
-const output	    = document.getElementById('output');
-let   answer;
-let   answer_ignore_nl = false;
-const input	    = document.getElementById('input');
-const more	    = document.getElementById('more');
-const trace	    = document.getElementById('trace');
-const editor	    = document.getElementById('editor');
-const select_file   = document.getElementById('select-file');
-const abort	    = document.getElementById('abort');
-const keyboard	    = document.getElementById('keyboard');
-let   yield	    = null;
-let   abort_request = false;
-let   history       = { stack: [], current: null };
-let   files	    = { current: default_file,
-			list: [default_file]
-		      };
-
-function user_file(file)
-{ return `${user_dir}/${file}`;
-}
-
-function is_user_file(file)
-{ return file.startsWith(`${user_dir}/`);
-}
-
-		 /*******************************
-		 *          CODEMIRROR          *
-		 *******************************/
-
-let CodeMirror;
-let cm;
-
-require.config(
-  { paths:
-    { "cm/lib/codemirror": "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.9/codemirror.min",
-      "cm/addon/edit/matchbrackets": "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.9/addon/edit/matchbrackets.min",
-      "cm/mode/prolog": "https://www.swi-prolog.org/download/codemirror/mode/prolog"
-    }
-  });
-
-function initCodeMirror(cont)
-{ function createCM()
-  { cm = CodeMirror(document.getElementById("file"),
-                    { lineNumbers: true,
-		      matchBrackets: true,
-		      mode: "prolog",
-		      theme: "prolog",
-		      prologKeys: true
-                    });
-  }
-
-  require(["cm/lib/codemirror",
-	   "cm/addon/edit/matchbrackets",
-	   "cm/mode/prolog/prolog",
-	   "cm/mode/prolog/prolog_keys",
-	  ], (cm) => {
-	    CodeMirror = cm;
-	    createCM();
-	    restoreFiles();
-	    addExamples().then(()=>{cont();});
-	  });
-}
-
-function loadCss(url)
-{ const link = document.createElement("link");
-  link.type = "text/css";
-  link.rel = "stylesheet";
-  link.href = url;
-  document.getElementsByTagName("head")[0].appendChild(link);
-}
-
-loadCss("https://eu.swi-prolog.org/download/codemirror/theme/prolog.css");
-
-/**
- * Go to a given 1-based line number
- *
- * @param {number} line
- * @param {Object} [options]
- * @param {number} [options.linepos] Go to a specific column
- */
-
-function cm_goto(cm, line, options)
-{ options  = options||{};
-  const ch = options.linepos||0;
-
-  function clearSearchMarkers(cm)
-  { if ( cm._searchMarkers !== undefined )
-    { for(let i=0; i<cm._searchMarkers.length; i++)
-      cm._searchMarkers[i].clear();
-      cm.off("cursorActivity", clearSearchMarkers);
-    }
-    cm._searchMarkers = [];
-  }
-
-  clearSearchMarkers(cm);
-  line = line-1;
-
-  cm.setCursor({line:line,ch:ch});
-  cm._searchMarkers.push(
-    cm.markText({line:line, ch:0},
-		{line:line, ch:cm.getLine(line).length},
-		{ className:"CodeMirror-search-match",
-		  clearOnEnter: true,
-		  clearWhenEmpty: true,
-		  title: "Target line"
-		}));
-  cm.on("cursorActivity", clearSearchMarkers);
-}
-
-
-		 /*******************************
-		 *    PROLOG OUTPUT STREAMS     *
-		 *******************************/
-
-function print_output(line, cls, sgr) {
-  if ( line.trim() == "" && answer && answer_ignore_nl )
-  { answer_ignore_nl = false;
-    return;
-  }
-
-  let node;
-  if ( sgr && sgr.link )
-  { node = document.createElement('a');
-    node.href = sgr.link;
-    node.target = "_blank";
-    node.addEventListener("click", tty_link);
-  } else
-  { node = document.createElement('span');
-    if ( sgr )
-    { if ( sgr.color )
-      node.style.color = sgr.color;
-      if ( sgr.background_color )
-	node.background_color.color = sgr.background_color;
-      if ( sgr.bold )
-	node.classList.add("bold");
-      if ( sgr.underline )
-	node.classList.add("underline");
-    }
-  }
-  node.classList.add(cls);
-  node.textContent = line;
-  (answer||output).appendChild(node);
+const config = {
+  user_dir: "/prolog",
+  default_file_name: "scratch.pl"
 };
 
+let Module;
+let Prolog;
 
-async function tty_link(ev)
-{ const a = ev.target;
-  const to = a.href;
-  if ( to.startsWith("file://") ||
-       to.match("https?://.*\\.pl\(#\d+\)?") )
-  { ev.preventDefault();
-    await Prolog.forEach("tinker:tty_link(Link)", {Link:to});
+		 /*******************************
+		 *            SOURCE            *
+		 *******************************/
+
+/**
+ * Encapsulate the  right pane of  Tinker, providing the  editor, file
+ * selector, (re)consult button and up/download buttons.
+ */
+
+export class Source {
+  files;			// Current and available
+  default_file;			// Use scratch file
+  user_dir;			// Directory for user files
+  select_file;			// File selector
+  editor;			// Editor instance
+  elem;				// The <form>
+  persist;			// Persist instance
+  con;				// Console instance
+
+  /**
+   * Create the Tinker source file  manager from an DOM structure that
+   * contains the  various components.  Components are  found by name.
+   * Most  components are  optional, not  providing the  functionality
+   * when missing.
+   *
+   * @param {HTMLFormElement} elem Toplevel element used.
+   * @param {object} [options] Options processed.
+   * @param {string} [options.user_dir] Working directory where user
+   * files are placed.  Defaults to `"/prolog"`.
+   * @param {string} [options.default_file_name] Default (scratch)
+   * file.  Defaults to `"scratch.pl"`
+   * @param {Persist} [options.persist] Persistency manager.  Defaults
+   * to `new Persist()`.
+   * @param {Console} [options.console] Console into which to inject
+   * queries.
+   */
+  constructor(elem, opts) {
+    const self = this;
+    this.elem = elem;
+    elem.data = {instance: this};
+
+    opts = opts||{};
+
+    this.persist = opts.persist||new Persist();
+    this.persist.source = this;
+    this.con = opts.console;
+    this.user_dir = opts.user_dir||"/prolog";
+    this.default_file =
+      `${this.user_dir}/${opts.default_file_name||"scratch.pl"}`
+    this.files = { current: this.default_file,
+		   list: [this.default_file]
+		 };
+    this.select_file = this.byname("select-file");
+
+    Module.FS.mkdir(this.user_dir);
+
+    this.editor = new Editor(this.byname("editor"),
+				   () => self.afterEditor());
+    // Register event handling
+    this.armFileSelect();
+    this.armNewFileButton();
+    this.armFileCreateButton();
+    this.armDeleteFile();
+    this.armDownloadButton();
+    this.armUploadButton();
+    this.armConsult();
   }
-  // Use default action
-}
 
+  afterEditor() {
+    this.persist.restore();
+    this.addExamples();
+  }
+
+  set value(source)   { this.editor.value = source; }
+  get value()         { return this.editor.value; }
+  goto(line, options) { this.editor.goto(line, options); }
+
+
+  /**
+   * Add the examples to the file selector.  This is not ideal as
+   * the standard HTML `<select>` does not allow for styling.
+   */
+  async addExamples() {
+    const json = await fetch("examples/index.json").then((r) => {
+      return r.json();
+    });
+
+    if ( Array.isArray(json) && json.length > 0 ) {
+      const select = this.select_file;
+      const sep = document.createElement("option");
+      sep.textContent = "Demos";
+      sep.disabled = true;
+      select.appendChild(sep);
+
+      json.forEach((ex) => {
+	if ( !this.hasFileOption(select, this.userFile(ex.name)) ) {
+	  const opt = document.createElement("option");
+	  opt.className = "url";
+	  opt.value = "/wasm/examples/"+ex.name;
+	  opt.textContent = (ex.comment||ex.name) + " (demo)";
+	  select.appendChild(opt);
+	}
+      });
+    }
+  }
+
+  /**
+   * Add name to the file menu.
+   * @param {string} name is the absolute name of the file that
+   * is stored in the `value` attribute of the `<option>` element.
+   * @return {HTMLElement} holding the `<option>` element.
+   */
+  addFileOption(name) {
+    const select = this.select_file;
+    let node = this.hasFileOption(name);
+
+    if ( !node )
+    { node = document.createElement('option');
+      node.textContent = this.baseName(name);
+      node.value = name;
+      node.selected = true;
+      const sep = this.demoOptionSep();
+      if ( sep )
+	select.insertBefore(node, sep);
+      else
+	select.appendChild(node);
+    }
+
+    return node;
+  }
+
+  /**
+   * Switch the source view to a specific file.  This updates the file
+   * selector, saves the old file and loads the new file.
+   * @param {string} name is the full path of the file to switch to.
+   */
+  switchToFile(name) {
+    const options = Array.from(this.select_file.childNodes);
+
+    options.forEach((e) => {
+      e.selected = e.value == name;
+    });
+
+    if ( this.files.current != name ) {
+      this.ensureSavedCurrentFile();
+      this.files.current = name;
+      if ( !this.files.list.includes(name) )
+	this.files.list.push(name);
+      this.persist.loadFile(name);
+      this.updateDownload(name);
+    }
+  }
+
+  /**
+   * Delete a  file from  the menu,  the file  system and  the browser
+   * localStorage.  The source view switches  to the next file, unless
+   * this is the last.  In that case it switches to the previous.
+   *
+   * @param {string} file is the file to be deleted.
+   */
+
+  deleteFile(file) {
+    const select = this.select_file;
+    const opt = this.hasFileOption(file);
+    let to = opt.nextElementSibling;
+    const sep = this.demoOptionSep();
+    if ( !to || to == sep )
+      to = opt.previousElementSibling;
+    if ( !to )
+      to = default_file;
+    this.switchToFile(to.value);
+    opt.parentNode.removeChild(opt);
+    this.files.list = this.files.list.filter((n) => (n != file));
+    this.persist.removeFile(file);
+    Module.FS.unlink(file);
+  }
+
+  currentFileOption() {
+    return this.select_file.options[this.select_file.selectedIndex];
+  }
+
+  hasFileOption(name) {
+    return Array.from(this.select_file.childNodes)
+                .find((n) => n.value == name );
+  }
+
+  demoOptionSep() {
+    return Array.from(this.select_file.childNodes)
+                .find((n) => n.textContent == "Demos" && n.disabled);
+  }
+
+  armFileSelect() {
+    this.select_file.addEventListener("change", (e) => {
+      const opt = this.currentFileOption();
+
+      if ( opt.className == "url" ) {
+	fetch(opt.value)
+	  .then((res) => res.text())
+	  .then((s) => {
+	    const name = this.baseName(opt.value);
+	    opt.className = "local";
+	    opt.value = this.userFile(name);
+	    opt.textContent = name;
+	    Module.FS.writeFile(opt.value, s);
+	    this.switchToFile(opt.value);
+	  });
+      } else
+      { this.switchToFile(opt.value);
+      }
+    });
+  }
+
+  armNewFileButton() {
+    const btn = this.byname("new-file");
+    btn.addEventListener("click", (e) => {
+      const fname = this.byname("file-name");
+      e.preventDefault();
+      this.elem.classList.add("create-file");
+      e.target.disabled = true;
+      fname.value = "";
+      fname.focus();
+    });
+  }
+
+  armFileCreateButton() {
+    const btn = this.byname("create-button");
+    const input = this.byname("file-name");
+
+    input.addEventListener("keydown", (e) => {
+      if ( e.key === "Enter" )
+	btn.click();
+    });
+
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      let name  = input.value.trim();
+
+      if ( /^[a-zA-Z 0-9.-_]+$/.test(name) )
+      { if ( ! /\.pl$/.test(name) )
+	name += ".pl";
+
+	name = this.userFile(name);
+	this.addFileOption(name);
+	this.switchToFile(name);
+	this.elem.classList.remove("create-file");
+	this.byname("new-file").disabled = false;
+      } else
+      { alert("No or invalid file name!");
+      }
+    });
+  }
+
+  armDeleteFile() {
+    const btn = this.byname("delete-file");
+    if ( btn ) {
+      btn.addEventListener("click", (e) => {
+	e.preventDefault();
+	const del = this.currentFileOption().value;
+
+	if ( del == this.default_file )
+	{ alert("Cannot delete the default file");
+	  return;
+	}
+	if ( !this.isUserFile(del) )
+	{ alert("Cannot delete system files");
+	  return;
+	}
+	this.deleteFile(del);
+      });
+    }
+  }
+
+  /**
+   * Update the  title and  download location  of the  download button
+   * after switching files.
+   */
+  updateDownload(file) {
+    const btn = this.elem.querySelector("a.btn.download");
+    if ( btn ) {
+      file = this.baseName(file);
+      btn.download = file;
+      btn.title = `Download ${file}`;
+      btn.href = "download";
+    }
+  }
+
+  armDownloadButton() {
+    const btn = this.elem.querySelector("a.btn.download");
+    if ( btn ) {
+      btn.addEventListener("click", (ev) => {
+	const text = this.value;
+	const data = new Blob([text]);
+	const btn = ev.target;
+	btn.href = URL.createObjectURL(data);
+      })
+    }
+  }
+
+  async download_files(files) {
+    for(let i=0; i<files.length; i++) {
+      const file = files[i];
+      const content = await this.readAsText(file);
+      const name = this.userFile(this.baseName(file.name));
+      this.addFileOption(name);
+      this.switchToFile(name);
+      this.value = content;
+      this.ensureSavedCurrentFile();
+    }
+  }
+
+  armUploadButton() {
+    const btn = this.elem.querySelector("a.btn.upload");
+    if ( btn ) {
+      btn.addEventListener("click", (ev) => {
+	const exch = ev.target.closest("span.exch-files");
+	if ( exch.classList.contains("upload-armed") ) {
+	  const files = exch.querySelector('input.upload-file').files;
+	  this.download_files(files).then(() => {
+	    exch.classList.remove("upload-armed");
+	  });
+	} else {
+	  exch.classList.add("upload-armed")
+	}
+      });
+    }
+  }
+
+  ensureSavedCurrentFile() {
+    const file = this.files.current;
+    if ( file ) {
+      if ( this.isUserFile(file) )
+	Module.FS.writeFile(file, this.value);
+      return file;
+    }
+  }
+
+  /**
+   * Arm the form submit button.
+   */
+
+  armConsult() {
+    const btn = this.byname("consult");
+    if ( btn )
+      btn.addEventListener('click', (e) => {
+	e.preventDefault();
+	const file = this.ensureSavedCurrentFile();
+	this.con.injectQuery(`consult('${file}').`); // TODO: quote
+      }, false);
+  }
+
+  /**
+   * @return {Promise} for handling the content of an uploaded file.
+   */
+  readAsText(file) {
+    return new Promise((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onerror = reject;
+        fr.onload = () => {
+            resolve(fr.result);
+        }
+        fr.readAsText(file);
+    });
+  }
+
+  /**
+   * @return {string}  full path  name of  a user  file from  the base
+   * name.
+   */
+  userFile(base) {
+    return `${this.user_dir}/${base}`;
+  }
+
+  /**
+   * @return {bool} `true` when `file` is a _user file_.
+   */
+  isUserFile(file) {
+    return file.startsWith(`${this.user_dir}/`);
+  }
+
+  baseName(path) {
+    return path.split("/").pop();
+  }
+
+  /**
+   * Find one of my components by its name.
+   * @param {string} name Name of the component to find.
+   * @return {HTMLElement} Element with that name;
+   */
+  byname(name) {
+    return this.elem.querySelector(`[name=${name}]`);
+  }
+} // end class Source
+
+
+		 /*******************************
+		 *      THE SOURCE EDITOR       *
+		 *******************************/
+
+/**
+ * Encapsulate  the  editor.   In  this  case  the  actual  editor  is
+ * CodeMirror.  Defines methods to
+ *   - Initialise the editor
+ *   - Set and get its value
+ *   - Go to a line/column
+ */
+
+export class Editor {
+  static cm_url = "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.9";
+  static cm_swi = "https://www.swi-prolog.org/download/codemirror";
+  CodeMirror;
+
+  constructor(container, cont) {
+    const instance = this;
+
+    function loadCss(url)
+    { const link = document.createElement("link");
+      link.type = "text/css";
+      link.rel = "stylesheet";
+      link.href = url;
+      document.getElementsByTagName("head")[0].appendChild(link);
+    }
+
+    function cm_url(sub) {
+      return Editor.cm_url + sub;
+    }
+    function cm_swi(sub) {
+      return Editor.cm_swi + sub;
+    }
+
+    require.config({ paths: {
+      "cm/lib/codemirror":           cm_url("/codemirror.min"),
+      "cm/addon/edit/matchbrackets": cm_url("/addon/edit/matchbrackets.min"),
+      "cm/mode/prolog":              cm_swi("/mode/prolog")
+    }});
+
+    require(["cm/lib/codemirror",
+	     "cm/addon/edit/matchbrackets",
+	     "cm/mode/prolog/prolog",
+	     "cm/mode/prolog/prolog_keys",
+	    ], (cm) => {
+	      this.CodeMirror = cm;
+	      this.createCM(container);
+	      cont.call(this.cm);
+	    });
+
+    loadCss(cm_swi("/theme/prolog.css"));
+  }
+
+  createCM(container) {
+    this.cm = this.CodeMirror(container,
+			      { lineNumbers: true,
+				matchBrackets: true,
+				mode: "prolog",
+				theme: "prolog",
+				prologKeys: true
+			      });
+  }
+
+  /**
+   * Content of the editor
+   * @type {string}
+   */
+  get value() {
+    return this.cm.getValue();
+  }
+  set value(content) {
+    this.cm.setValue(content);
+  }
+
+  /**
+   * Go to a given 1-based line number
+   *
+   * @param {number} line
+   * @param {Object} [options]
+   * @param {number} [options.linepos] Go to a specific column
+   */
+
+  goto(line, options) {
+    options  = options||{};
+    const ch = options.linepos||0;
+
+    function clearSearchMarkers(cm)
+    { if ( cm._searchMarkers !== undefined )
+      { for(let i=0; i<cm._searchMarkers.length; i++)
+	cm._searchMarkers[i].clear();
+	cm.off("cursorActivity", clearSearchMarkers);
+      }
+      cm._searchMarkers = [];
+    }
+
+    clearSearchMarkers(this.cm);
+    line = line-1;
+
+    this.cm.setCursor({line:line,ch:ch});
+    this.cm._searchMarkers.push(
+      this.cm.markText({line:line, ch:0},
+		  {line:line, ch:this.cm.getLine(line).length},
+		  { className:"CodeMirror-search-match",
+		    clearOnEnter: true,
+		    clearWhenEmpty: true,
+		    title: "Target line"
+		  }));
+    this.cm.on("cursorActivity", clearSearchMarkers);
+  }
+} // End class Editor
 
 function getPromiseFromEvent(item, event) {
   return new Prolog.Promise((resolve) => {
@@ -207,344 +560,1013 @@ function getPromiseFromEvent(item, event) {
   })
 }
 
-async function get_single_char()
-{ terminal.classList.add("key");
-  keyboard.focus();
-  const ev = await getPromiseFromEvent(keyboard, "keyup");
-  terminal.classList.remove("key");
-  return ev.keyCode;
-}
+		 /*******************************
+		 *       CREATE ELEMENTS        *
+		 *******************************/
 
-function getCharSize(element)
-{ if ( !element.char_size )
-  { let temp = document.createElement("span");
-    temp.className = "stdout";
-    temp.textContent = "test";
-    element.appendChild(temp);
-    const rect = temp.getBoundingClientRect();
-    element.char_size = { h: rect.height,
-			  w: rect.width/4
-			};
-    element.removeChild(temp);
+function el(sel, ...content) {
+  const ar   = sel.split(".");
+  const elem = document.createElement(ar.shift());
+  if ( ar.length > 0 )
+    elem.className = ar.join(" ");
+  for(let e of content) {
+    if ( typeof(e) === "string" )
+      e = document.createTextNode(e);
+    elem.appendChild(e);
   }
-  return element.char_size;
-}
-
-function tty_size()
-{ const tty = document.querySelector("div.console");
-  const wrapper = tty.closest("div.scroll-wrapper");
-  const charsz = getCharSize(output);
-  return [ Math.floor(wrapper.clientHeight/charsz.h),
-	   Math.floor(wrapper.clientWidth/charsz.w)
-	 ];
+  return elem;
 }
 
 		 /*******************************
 		 *       OUTPUT STRUCTURE       *
 		 *******************************/
 
-/** @return {HTMLDivElement} in which the current query should dump
- * its answer.
+/**
+ * A console is scrollable area that can handle queries.
  */
 
-function current_answer()
-{ return answer;
+export class Console {
+  output;			// element to write in
+  history;			// Query history
+  persist;			// (History) persistency
+
+  /**
+   * Create a Tinker console.
+   * @param {HTMLDivElement} elem Element that is wrapped to
+   * provide a scrollable area and prepared for addding
+   * instances of `Query`.
+   * @param {object} [options]
+   * @param {Persist} [options.persist] `Persist` instance used to load
+   * the command line history.   When omitted, the history is not saved.
+   */
+  constructor(elem, options) {
+    this.elem = elem;
+    elem.classList.add("tinker-console");
+    elem.data = {instance: this};
+
+    options = options||{};
+    this.persist = options.persist;
+
+    this.output = el("div.tinker-console-output");
+    const wrapper = el("div.tinker-console-wrapper",
+		       el("span.tinker-scroll-start-at-top"));
+    elem.parentNode.insertBefore(wrapper, elem);
+    wrapper.appendChild(elem);
+    elem.appendChild(this.output);
+    this.#initHistory();
+  }
+
+  #initHistory() {
+    this.history = {
+      stack: [],
+      current: null
+    };
+    if ( this.persist )
+      this.persist.load("history", this.history, ["stack"]);
+  }
+
+  pushHistory(line) {
+    if ( this.history.stack.length == 0 ||
+	 this.history.stack[this.history.stack.length-1] != line )
+      this.history.stack.push(line);
+    this.history.current = null;
+  }
+
+  upHistory(line) {
+    if ( this.history.current == null ) {
+      this.history.saved = line;
+      this.history.current = this.history.stack.length;
+    }
+    if ( --this.history.current >= 0 ) {
+      return this.history.stack[this.history.current];
+    }
+  }
+
+  downHistory() {
+    if ( this.history.current != null ) {
+      if ( this.history.current+1 < this.history.stack.length ) {
+	this.history.current++;
+	return this.history.stack[this.history.current];
+      } else if ( this.history.saved !== undefined ) {
+	const val = this.history.saved;
+	this.history.saved = undefined;
+	return val;
+      }
+    }
+  }
+
+  /**
+   * @return {Query} Last query displayed on the console.
+   * `undefined` if there is no last query
+   */
+  lastQuery() {
+    const q = this.output.lastChild;
+    while(q) {
+      if ( q.classList.contains("tinker-query") && q.data )
+	return q.data.query;
+      q = q.previousElementSibling;
+    }
+  }
+
+  /**
+   * Add a  new query.  This  presents a  prompt.  After the  query is
+   * entered, it  will be executed in  the context of this  query.  If
+   * there is already a query with read state, select that.
+   * @param {bool} [focus] If `false`, do not focus the new query
+   */
+
+  addQuery(options) {
+    options = options||{};
+    const open = this.elem.querySelector("div.tinker-query.read.query");
+    if ( open ) {
+      if ( options.focus !== false )
+	open.data.query.input.focus("query");
+    } else {
+      const q = new Query();
+      this.output.appendChild(q.elem);
+      q.read(options);
+    }
+  }
+
+  /**
+   * Inject a  query.  This is used  by e.g., the consult  button.  If
+   * the last query  is open and empty, use that.   Otherwise inject a
+   * query before the last.
+   *
+   * @param {string} query query to inject.
+   */
+  injectQuery(query) {
+    const open = this.lastQuery();
+
+    if ( open && open.input.target == "query" ) {
+      if ( !open.input.value.trim() ) {
+	open.run(query);
+      } else {
+	const q = new Query();
+	open.elem.parentNode.insertBefore(q.elem, open.elem);
+	q.run(query);
+      }
+    } else {
+      Prolog.call(query);
+    }
+  }
+
+  currentQuery() {
+    const e = Prolog.current_engine();
+    if ( e )
+      return e.current_query;
+  }
+
+  /**
+   * @return {HTMLDivElement} that represents the `<div>` into which
+   * the current answer must be written.  Returns `undefined` if there
+   * is no current open query.
+   */
+  currentAnswer() {
+    let q;
+    if ( (q=this.currentQuery()) )
+      return q.answer;
+  }
+
+  #getCharSize(element) {
+    if ( !element.char_size )
+    { let temp = document.createElement("span");
+      temp.className = "stdout";
+      temp.textContent = "test";
+      element.appendChild(temp);
+      const rect = temp.getBoundingClientRect();
+      element.char_size = { h: rect.height,
+			    w: rect.width/4
+			  };
+      element.removeChild(temp);
+    }
+    return element.char_size;
+  }
+
+  /**
+   * @return {Array} holding [rows, columns]
+   */
+  tty_size() {
+    const wrapper = this.elem.closest("div.scroll-wrapper");
+    const charsz = this.#getCharSize(this.output);
+    return [ Math.floor(wrapper.clientHeight/charsz.h),
+	     Math.floor(wrapper.clientWidth/charsz.w)
+	   ];
+  }
+
+  /**
+   * Clear the console.  Leaves not completed queries alone.
+   */
+  clear() {
+    const rem = [];
+    for(let node of this.output.childNodes) {
+      if (  node.classList.contains("tinker-query") &&
+	   !node.classList.contains("complete") )
+	continue;
+      rem.push(node);
+    }
+    for(let node of rem)
+      node.remove();
+  }
+
+  /**
+   * Print a string to the console.
+   * @param {string} line content that must be printed
+   * @param {string} cls class (stream), one of "stdout" or "stderr"
+   * @param {object} [sgr] parsed ANSI sequence.  Currently provides
+   * color, bold, underline or link.
+   */
+  print(line, cls, sgr, query) {
+    query = query||this.currentQuery();
+    if ( line.trim() == "" && query &&
+	 query.answer_ignore_nl && query.answer ) {
+      query.answer_ignore_nl = false;
+      return;
+    }
+
+    let node;
+    if ( sgr && sgr.link ) {
+      node = document.createElement('a');
+      node.href = sgr.link;
+      node.target = "_blank";
+      node.addEventListener("click", this.tty_link);
+    } else {
+      node = document.createElement('span');
+      if ( sgr ) {
+	if ( sgr.color )
+	  node.style.color = sgr.color;
+	if ( sgr.background_color )
+	  node.background_color.color = sgr.background_color;
+	if ( sgr.bold )
+	  node.classList.add("bold");
+	if ( sgr.underline )
+	  node.classList.add("underline");
+      }
+    }
+    node.classList.add(cls);
+    node.textContent = line;
+
+    let out;
+    if ( query && query.answer )
+      out = query.answer;
+    else
+      out = this.output;
+
+    out.appendChild(node);
+  }
+
+  /**
+   * Handle a click on a terminal hyperlink.  If we can trace the link
+   * to one  of our  files, call `tinker:tty_link/1`.   Otherwise open
+   * the link in a new tab.
+   * @param {Event} ev is the click event on the `<a>` element
+   */
+  async tty_link(ev) {
+    const a = ev.target;
+    const to = a.href;
+    if ( to.startsWith("file://") ||
+	 to.match("https?://.*\\.pl\(#\d+\)?") )
+    { ev.preventDefault();
+      await Prolog.forEach("tinker:tty_link(Link)", {Link:to});
+    }
+    // Use default action
+  }
+
+  /**
+   * Find the console instance from a nested element
+   * @return {Console}
+   */
+  static findConsole(from) {
+    const elem = from.closest(".tinker-console");
+    if ( elem && elem.data && elem.data.instance )
+      return elem.data.instance;
+  }
 }
 
+		 /*******************************
+		 *         TINKER QUERY         *
+		 *******************************/
 
-/** Add a structure for a query.  The structure is
+// All possible states for a query.  Used to remove all states.
+const state_classes = [
+  "run", "more", "trace", "read", "prompt", "query", "term", "line"
+];
+
+/**
+ * Enter and control  a Prolog query life cycle.   The Tinker toplevel
+ * adds an instance of this class  to Console.  The query shows itself
+ * as an input  field using the `?-` prompt.  After  the user enters a
+ * Prolog query and hits _Enter_,  the Query instance enters the `run`
+ * state by calling `Prolog.call()`.
  *
- * ```
- * <div class="query-container">
- *   <div class="query-header">?- betweenl(1,3,X).</div
- *   <div class="query-answers">
- *     <div class="query-answer">
- *       <span class="stdout">X = 1;</span>
- *     </div>
- *     <div class="query-answer">
- *       <span class="stdout">X = 2;</span>
- *     </div>
- *     ...
- *   </div>
- * </div>
- * ```
+ * The  `Query` instance  manages the  Prolog execution  based on  the
+ * return  state   from  `Prolog.call()`  using   `Query.next()`.   If
+ * executing the query _yields_, asking  for user input, class `Query`
+ * handles  the interaction  and resumes  the Prolog  execution.  This
+ * process continues  until a  final state  is reached  (final answer,
+ * failure or error).
  */
 
-function add_query(query)
-{ const div1 = document.createElement("div");
-  const div2 = document.createElement("div");
-  const div3 = document.createElement("div");
-  const div4 = document.createElement("div");
-  const btns = document.createElement("span");
-  const edit = document.createElement("span");
-  const close = document.createElement("span");
-  const icon = document.createElement("span");
-  btns.className = "query-buttons";
-  edit.textContent = "\u270E";
-  edit.title = "Copy query to input";
-  close.textContent = "\u2715";
-  icon.className = "query-collapse";
-  icon.title = "Collapse/expand answer";
-  btns.appendChild(edit);
-  btns.appendChild(icon);
-  btns.appendChild(close);
+export class Query {
+  elem;				// div.query-container
+  answer;			// div.query-answer
+  input;			// Input
+  engine;			// Prolog engine
+  #state;			// "run", "more", "trace",
+				// "prompt query", "prompt term", "prompt line"
+  /**
+   * Create a `<div>` to interact with a new Prolog query.
+   * The structure is
+   *
+   * ```
+   * <div class="tinker-query">
+   *   <div class="query-header">
+   *     <span class="query-prompt">?-</span>
+   *     <span class="query-goal">between(1,3,X).</span>
+   *     <span class="query-buttons">...</span>
+   *   </div
+   *   <div class="query-answers">
+   *     <div class="query-answer">
+   *       <span class="stdout">X = 1</span>
+   *     </div>
+   *     <div class="query-answer">
+   *       <span class="stdout">X = 2</span>
+   *     </div>
+   *     ... // more answers
+   *   </div>
+   *   <div> // controls (abort, next/stop, trace, ...)
+   *     <div class="tinker-abort">...</div>
+   *     ...
+   *   </div>
+   * </div>
+   * ```
+   * @param {string} [query] is the Prolog query to run.
+   */
+  constructor(query, options) {
+    options = options||{};
+    const hdr  = el("div.query-header",
+		    el("span.query-prompt", "?-"),
+		    el("span.query-goal"));
+    const ans  = el("div.query-answer");
+    const ansl = el("div.query-answers", ans);
+    const ctrl = el("div");
 
-  const prev = last_query();
-  if ( prev )
-    query_collapsed(prev, true);
+    this.elem = el("div.tinker-query",
+		   hdr, ansl, ctrl);
+    this.elem.data = { query: this };
 
-  div1.className = "query-container";
-  div2.className = "query-header";
-  div3.className = "query-answers";
-  div4.className = "query-answer";
-  div1.appendChild(btns);
-  div1.appendChild(div2);
-  div1.appendChild(div3);
-  div3.appendChild(div4);
-  div2.textContent = `?- ${query}`;
-  answer = div4;
-  edit.addEventListener("click", () => {
-    const queryElem = input.querySelector("input");
-    queryElem.value = query;
-    queryElem.focus();
-  });
-  close.addEventListener("click", () => div1.remove(), false);
-  icon.addEventListener(
-    "click",
-    (e) => query_collapsed(e.target.closest("div.query-container")));
-  output.appendChild(div1);
-}
+    this.#fillHeader(hdr);
+    this.#fillControl(ctrl);
 
-function last_query()
-{ const q = output.lastChild;
-  if ( q && q.classList.contains("query-container") )
-    return q;
-  return undefined;
-}
-
-function query_collapsed(query, how)
-{ if ( how === true )
-  query.classList.add("collapsed");
-  else if ( how === false )
-    query.classList.remove("collapsed");
-  else
-    query.classList.toggle("collapsed");
-}
-
-
-/** Add a new answer `<div>` after we asked for more answers.
- */
-function next_answer()
-{ if ( answer )
-  { const div4 = document.createElement("div");
-    div4.className = "query-answer";
-    answer.after(div4);
-    answer = div4;
-    answer_ignore_nl = true; // suppress the first newline
+    this.engine = options.engine;
+    this.query  = query;
+    this.answer = ans;
   }
-}
 
-/** Run a query.  Used for e.g., consulting the current file.
- * @param {String} query is the query to run.
- */
-function query(query)
-{ add_query(query);
-
-  if ( yield && yield.yield == "query" )
-  { set_state("run");
-    next(yield.resume(query));
-  } else
-  { Prolog.call(query);
+  /**
+   * The query as it appears in the title
+   * @type {string}
+   */
+  set query(query) {
+    const span = this.elem.querySelector("span.query-goal");
+    if ( query )
+      span.textContent = query;
+    else
+      span.textContent = "";
   }
-}
+  get query() {
+    const span = this.elem.querySelector("span.query-goal");
+    return span.textContent;
+  }
+
+  /**
+   * Console this query belongs to.
+   * @type {Console}
+   */
+  get console() {
+    return Console.findConsole(this.elem);
+  }
+
+  #fillHeader(hdr) {
+    const self = this;
+    const edit  = el("span", "\u270E");
+    const close = el("span", "\u2715");
+    const icon  = el("span.query-collapse");
+    edit.title  = "Copy query to input";
+    icon.title  = "Collapse/expand answer";
+    const btns  = el("span.query-buttons",
+		     edit, icon, close);
+    hdr.appendChild(btns);
+
+    close.addEventListener("click", () => self.close(), false);
+    edit.addEventListener("click", () => {
+      const con = this.console;
+      const open = con.lastQuery();
+      if ( open && open.input.target == "query" ) {
+	open.input.value = self.query;
+	open.input.focus("query");
+      }
+    });
+    icon.addEventListener("click", () => self.collapsed());
+  }
+
+  #fillControl(ctrl) {
+    this.input = new Input();
+    ctrl.appendChild(this.#createAbort());
+    ctrl.appendChild(this.#createMore());
+    ctrl.appendChild(this.#createTrace());
+    ctrl.appendChild(this.#createKbd());
+    ctrl.appendChild(this.input.elem);
+  }
+
+  #createAbort() {
+    const btn = el("button", "Abort");
+    const abort = el("div.tinker-abort", btn);
+
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      if ( this.waitfor && this.waitfor.abort )
+      { console.log("aborting", this.waitfor);
+	this.waitfor.abort();
+      } else
+      { console.log("Requesting abort");
+	this.abort_request = true;
+      }
+    });
+
+    return abort;
+  }
+
+  /**
+   * Fill the  input elements that  control user interaction  after an
+   * answer has been found.
+   */
+  #createMore() {
+    const self = this;
+    const next = el("button.more-next", "Next");
+    const stop = el("button.more-cont", "Stop");
+    const elem = el("div.tinker-more", next, stop);
+
+    next.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      self.reply_more("redo");
+    });
+    stop.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      self.reply_more("continue");
+    });
+
+    return elem;
+  }
+
+  promptMore() {
+    // this.elem.classList.add("more");
+    this.state = "more";
+    const btn = this.elem.querySelector("button.more-next");
+    btn.focus();
+  }
+
+  #createTrace() {
+    const self = this;
+    function button(action, title, label) {
+      const btn = el(`button.${action}`, label);
+      btn.title = title;
+      btn.addEventListener("click", () => {
+	self.reply_trace(action);
+      });
+      return btn;
+    }
+
+    const trace = el("div.tinker-trace",
+		     button("creep",   "Creep (c,Space,Enter)", "↳"),
+		     button("skip",    "Skip (s)",              "⏭"),
+		     button("retry",   "Retry (r)",             "↻"),
+		     button("nodebug", "Nodebug (n)",           "▶"),
+		     button("abort",   "Abort (a)",             "⏹"));
+
+    trace.addEventListener("keyup", (ev) => {
+      if ( ev.defaultPrevented ) return;
+      const action = trace_shortcuts[ev.key];
+      if ( action )
+      { ev.preventDefault();
+	ev.stopPropagation();
+	self.reply_trace(action);
+      }
+    });
+
+    return trace;
+  }
+
+  promptTrace() {
+    this.state = "trace";
+    const btn = this.elem.querySelector("button.creep");
+    btn.focus();
+  }
+
+  #createKbd() {
+    const div = el("div.tinker-keyboard",
+		   "⌨️",
+		   el("span", "waiting for a key"));
+    div.tabIndex = 0;
+    return div;
+  }
+
+  /**
+   * Get a single character
+   */
+  async get_single_char() {
+    const kbd = this.elem.querySelector("div.tinker-keyboard");
+    if ( kbd ) {
+      this.elem.classList.add("key");
+      kbd.focus();
+      const ev = await getPromiseFromEvent(kbd, "keyup");
+      this.elem.classList.remove("key");
+      return ev.keyCode;
+    } else
+      return -1;
+  }
+
+  promptLine(target) {
+    this.state = "prompt "+target;
+    this.input.focus(target);
+  }
+
+  /**
+   * Set/clear.toggle the collapsed state of the query
+   */
+  collapsed(how) {
+    if ( how === true )
+       this.elem.classList.add("collapsed");
+    else if ( how === false )
+      this.elem.classList.remove("collapsed");
+    else
+      this.elem.classList.toggle("collapsed");
+  }
+
+  set state(state) {
+    this.#state = state;
+    this.elem.classList.remove(...state_classes);
+    this.elem.classList.add(...state.split(" "));
+  }
+
+  get state() {
+    return this.#state;
+  }
+
+  hasState(state) {
+    return this.elem.classList.contains(state);
+  }
+
+  close() {			// TODO: What if not completed?
+    const con = this.console;
+    if ( con.currentQuery() != this )
+      this.elem.remove();
+    else
+      alert("Cannot close open query");
+  }
+
+  /**
+   * Find the  query before this  one.  Currently, we do  not consider
+   * the state of the query.
+   * @return {Query}
+   */
+  previous() {
+    let node = this.elem.previousElementSibling;
+    while(node) {
+      if ( node.classList.contains("tinker-query") )
+	return node.data.query;
+      node = node.previousElementSibling;
+    }
+  }
+
+  /**
+   * Read a query.  This is done to start with an empty query.
+   */
+
+  read(options) {
+    options = options||{};
+    this.state = "read query";
+    if ( options.focus !== false )
+      this.input.focus("query");
+    if ( options.placeholder )
+      this.input.placeholder = options.placeholder;
+  }
+
+  /**
+   * Run the query.
+   * @param {string} line Prolog source for the query to execute
+   * @param {Prolog.Engine|true} [engine] If provided run the query in
+   * an engine.  If `true`, a temporary engine is used that is closed
+   * after the query completes.
+   */
+  run(line, engine) {
+    engine = engine||this.engine;
+
+    if ( engine === true ) {
+      const e = new Prolog.Engine({auto_close:true});
+      this.engine = e;
+      this.elem.classList.add("engine");
+      e.with(() => this.__run(line));
+      this.addNextQuery({focus:false,
+			 placeholder:"Enter and run concurrent query"});
+    } else if ( engine instanceof Prolog.Engine ) {
+      this.engine = engine;
+      this.elem.classList.add("engine");
+      engine.with(() => this.__run(line));
+    } else {
+      this.__run(line);
+    }
+  }
+
+  __run(line) {
+    Prolog.current_engine().current_query = this;
+    this.query = line;
+    const jqline = new Prolog.Compound(":", "user", line);
+    const jgoal  = new Prolog.Compound("tinker_run", this, jqline);
+    const rc = Prolog.call(jgoal, { async:true, debugger:true });
+    this.state = "run";
+    const prev = this.previous();
+    if ( prev && prev.hasState("completed") )
+      prev.collapsed(true);
+    this.next(rc);
+  }
+
+  /**
+   * Handle the return of Prolog.call().  This is a success, failure,
+   * error or yield code.
+   * @param {object} rc Result from Prolog.call() using `async:true`.
+   */
+
+  next(rc) {
+    const self = this;
+
+    if ( rc.yield && this.engine instanceof Prolog.Engine ) {
+      return this.engine.with(() => self.__next(rc));
+    } else {
+      return this.__next(rc);
+    }
+  }
+
+  __next(rc)
+  { this.waitfor = null;
+
+    if ( rc.yield !== undefined ) {
+      this.waitfor = rc;
+
+      Prolog.flush_output();
+
+      if ( this.abort_request ) {
+	this.abort_request = false;
+	return this.__next(rc.resume("wasm_abort"));
+      }
+
+      switch(rc.yield)
+      { case "beat":
+          return setTimeout(() => this.__next(rc.resume("true")), 0);
+	case "query":
+          this.answer = undefined;
+          /*FALLTHROUGH*/
+	case "term":
+	case "line":
+          this.promptLine(rc.yield);
+          break;
+	case "more":
+          this.promptMore();
+          break;
+	case "trace":
+	{ this.trace_action("print", rc.trace_event);
+	  this.promptTrace();
+          break;
+	}
+	case "builtin":
+	{ rc.resume((rc) => this.__next(rc));
+          break;
+	}
+      }
+    } else {
+      if ( rc.error ) {
+	if ( rc.message == "Execution Aborted" ) {
+	  if ( this.engine && !this.engine.open ) {
+	    this.print("% Execution Aborted", "stderr", {color: "green"});
+	  } else {
+	    this.call("print_message(informational, unwind(abort))");
+	  }
+	} else
+	{ console.log("Unhandled exception; restarting", rc);
+	}
+      }
+      this.completed();
+    }
+  }
+
+  handleUserInput(line, event) {
+    switch(this.state)
+    { case "read query":
+      { this.run(line, event && event.shiftKey);
+	break;
+      }
+      case "prompt term":
+      case "prompt line":
+      { this.state = "run";
+	this.next(this.waitfor.resume(line));
+	break;
+      }
+    }
+  }
+
+  /**
+   * Add a `div.query-answer` element to capture the output and
+   * solution of the next answer.
+   */
+  next_answer() {
+    if ( this.answer ) {
+      const ans = document.createElement("div");
+      ans.className = "query-answer";
+      this.answer.after(ans);
+      this.answer = ans;
+      this.answer_ignore_nl = true; // suppress the first newline
+    }
+  }
+
+  /**
+   * Handle the "Next"/"Stop" buttons
+   */
+  reply_more(action) {
+    if ( this.waitfor && this.waitfor.yield == "more" ) {
+      switch(action)
+      { case "redo":
+	{ this.print(";", "stdout");
+	  this.next_answer();
+	  break;
+	}
+	case "continue":
+	{ this.print(".", "stdout");
+	  this.answer_ignore_nl = true;
+	  break;
+	}
+      }
+      this.next(this.waitfor.resume(action));
+    }
+  }
+
+  call(query, options) {
+    if ( this.engine )
+      return this.engine.with(() => Prolog.call(query, options));
+    else
+      return Prolog.call(query, options);
+  }
+
+  reply_trace(action) {
+    if ( this.waitfor && this.waitfor.yield == "trace" ) {
+      this.print(` [${action}]`, "stderr", {color: "#888"});
+      this.call("nl(user_error)", {nodebug:true});
+
+      switch(action)
+      { case "goals":
+	case "listing":
+	case "help":
+	{ this.trace_action(action, this.waitfor.trace_event);
+	  break;
+	}
+	default:
+	{ this.state = "run";
+	  this.next(this.waitfor.resume(action));
+	}
+      }
+    }
+  }
+
+  /**
+   * Call tinker.trace_action(action, msg)
+   */
+  trace_action(action, msg) {
+    const self = this;
+    if ( this.engine )
+      return this.engine.with(() => self.__trace_action(action, msg));
+    else
+      return self.__trace_action(action, msg);
+  }
+
+  __trace_action(action, msg) {
+    const prolog = Prolog;
+
+    return prolog.with_frame(() => {
+      const av = prolog.new_term_ref(2);
+
+      prolog.put_chars(av+0, action, prolog.PL_ATOM);
+      prolog.bindings.PL_put_term(av+1, msg);
+      const flags = prolog.PL_Q_NODEBUG;
+      const pred  = prolog.predicate("tinker:trace_action/2");
+      const qid   = prolog.bindings.PL_open_query(0, flags, pred, av);
+      const rc    = prolog.bindings.PL_next_solution(qid);
+      prolog.bindings.PL_close_query(qid);
+      return rc;
+    });
+  }
+
+  addNextQuery(options) {
+    this.console.addQuery(options);
+  }
+
+  /**
+   * The query we are running has been completed.
+   */
+  completed() {
+    this.state = "complete";
+    this.answer = undefined;
+    this.addNextQuery();
+  }
+
+  print(line, cls, sgr) {
+    this.console.print(line, cls, sgr, this);
+  }
+
+  tty_size() {
+    const con = Console.findConsole(this.elem);
+    if ( con )
+      return con.tty_size();
+  }
+} // end class Query
+
 
 		 /*******************************
 		 *        ENTER A QUERY         *
 		 *******************************/
 
-function submitQuery(queryElem)
-{ const input = queryElem.querySelector("input");
-  let query = input.value;
-  input.value = '';
+/**
+ * Handle term  input for  the toplevel.  This  deals with  entering a
+ * query, read/1 and friends and reading a line of input.
+ */
 
-  if ( queryElem.ex_target == "query" ||
-       queryElem.ex_target == "term" )
-  { if ( query.trim() == "" )
-    { return false;
-    } else
-    { if ( ! /\.\s*/.test(query) )
-        query += ".";
-    }
+export class Input {
+  elem;
+  target;			// "query", "term", or "line"
+
+  constructor() {
+    const input = el("input");
+    this.elem = el("div.tinker-input",
+		   el("span.prompt", "?- "),
+		   input);
+    this.elem.data = { instance: this };
+    input.type = "text";
+    input.name = "tinker-input";
+    input.autocapitalize = "none";
+    input.autocomplete = "off"
+    this.armInput();
+    this.armCompletion();
   }
 
-  if ( queryElem.ex_target == "query" )
-  { history.stack.push(query);
-    history.current = null;
-    add_query(query);
+  get value() {
+    const input = this.elem.querySelector("input");
+    return input.value;
   }
 
-  set_state("run");
-  next(yield.resume(query));
-  return true;
-}
-
-function focusInput(queryElem, why)
-{ const input  = queryElem.querySelector("input");
-  const prompt = queryElem.querySelector("span.prompt");
-  switch(why)
-  { case "query":
-    { prompt.textContent = "?-";
-      break;
-    }
-    default:
-    { const s = Prolog.prompt_string(0)||"|: ";
-      prompt.textContent = s;
-    }
+  set value(val) {
+    const input = this.elem.querySelector("input");
+    return input.value = val;
   }
-  input.placeholder = `Please enter a ${why}`;
-  input.focus();
-  queryElem.ex_target = why;
-}
 
-input.addEventListener("keydown", (event) =>
-{ if ( event.key == "Tab" )
-  { const elem   = input.querySelector("input");
-    const caret  = elem.selectionStart;
-    const all    = elem.value;
-    const before = all.slice(0,caret);
-    const after  = caret == all.length ? "" : all.slice(caret-all.length);
-
-    function commonPrefix(words)
-    { let i = 0;
-
-      while(words[0][i] && words.every(w => w[i] === words[0][i]))
-	i++;
-      return words[0].slice(0, i);
-    }
-
-    function setCompletion(to, del)
-    { elem.value = ( before.slice(0, before.length-del.length) +
-		     to +
-		     after );
-    }
-
-    const res = Prolog.query(
-      "tinker:complete_input(Before,After,Delete,Completions)",
-      {Before:before, After:after}).once();
-
-    if ( res.Completions.length == 1 )
-    { setCompletion(res.Completions[0], res.Delete.v);
-    } else if ( res.Completions.length > 1 )
-    { const common = commonPrefix(res.Completions);
-      if ( common.length > 0 )
-	setCompletion(common, res.Delete.v);
-    }
-
-    event.preventDefault();
+  set placeholder(val) {
+    const input = this.elem.querySelector("input");
+    return input.placeholder = val;
   }
-});
 
-input.addEventListener("keyup", (event) =>
-{ if ( event.defaultPrevented ) return;
+  query() {
+    return this.elem.closest(".tinker-query").data.query;
+  }
 
-  switch(event.key)
-  { case "ArrowUp":
-      if ( history.current == null )
-      {	history.saved = event.target.value;
-	history.current = history.stack.length;
+  /**
+   * Resume Prolog using the entered item as a string
+   */
+  submit(event) {
+    const input = this.elem.querySelector("input");
+    let query = input.value;
+    input.value = '';
+
+    if ( this.target == "query" ||
+	 this.target == "term" ) {
+      if ( query.trim() == "" ) {
+	return false;
+      } else {
+	if ( ! /\.\s*/.test(query) )
+          query += ".";
       }
-      if ( --history.current >= 0 )
-      { event.target.value = history.stack[history.current];
+
+      if ( this.target == "query" ) {
+	const con = Console.findConsole(this.elem);
+	con.pushHistory(query);
       }
-      break;
-    case "ArrowDown":
-      if ( history.current != null )
-      { if ( ++history.current < history.stack.length )
-	{ event.target.value = history.stack[history.current];
-	} else if ( history.current == history.stack.length )
-	{ event.target.value = history.saved;
+    }
+    const q = this.query();
+    q.handleUserInput(query, event);
+  }
+
+  /**
+   * focus the input element
+   * @param {string} target is one of "query", "term" or "line"
+   */
+  focus(target) {
+    const input  = this.elem.querySelector("input");
+    const prompt = this.elem.querySelector("span.prompt");
+    switch(target)
+    { case "query":
+      { prompt.textContent = "?- ";
+	input.placeholder = "Please enter a query.  (use Shift-Enter to execute in new engine)";
+	break;
+      }
+      default:
+      { const s = Prolog.prompt_string(0)||"|: ";
+	prompt.textContent = s;
+	input.placeholder = `Please enter a ${target}`;
+      }
+    }
+    input.focus();
+    this.target = target;
+  }
+
+  /**
+   * Handle allow  keys for  history and Enter  to submit  the current
+   * input.
+   */
+  armInput() {
+    const input = this.elem.querySelector("input");
+    input.addEventListener("keyup", (event) => {
+      if ( event.defaultPrevented ) return;
+
+      switch(event.key)
+      { case "ArrowUp":
+	case "ArrowDown":
+	{ const con = Console.findConsole(this.elem);
+	  let val;
+
+	  if( event.key === "ArrowUp" )
+	    val = con.upHistory(input.value);
+	  else
+	    val = con.downHistory(input.value);
+
+	  if ( val !== undefined )
+	    input.value = val;
+	  break;
+	}
+	case "Enter":
+	{ this.submit(event);
+	  break;
+	}
+	default:
+	return;
+      }
+
+      event.preventDefault();
+    }, true);
+  }
+
+  /**
+   * Enable Tab-based completion on the element
+   * @todo show possible completions in case there are multiple.
+   */
+  armCompletion() {
+    const input = this.elem.querySelector("input");
+    input.addEventListener("keydown", (event) => {
+      if ( event.key == "Tab" ) {
+	event.preventDefault();
+	const caret  = input.selectionStart;
+	const all    = input.value;
+	const before = all.slice(0,caret);
+	const after  = caret == all.length ? "" : all.slice(caret-all.length);
+
+	function commonPrefix(words)
+	{ let i = 0;
+
+	  while(words[0][i] && words.every(w => w[i] === words[0][i]))
+	    i++;
+	  return words[0].slice(0, i);
+	}
+
+	function setCompletion(to, del)
+	{ input.value = ( before.slice(0, before.length-del.length) +
+			  to +
+			  after );
+	}
+
+	const res = Prolog.query(
+	  "tinker:complete_input(Before,After,Delete,Completions)",
+	  {Before:before, After:after}).once();
+
+	if ( res.Completions.length == 1 ) {
+	  setCompletion(res.Completions[0], res.Delete.v);
+	} else if ( res.Completions.length > 1 ) {
+	  const common = commonPrefix(res.Completions);
+	  if ( common.length > 0 )
+	    setCompletion(common, res.Delete.v);
 	}
       }
-      break;
-    case "Enter":
-    { submitQuery(input);
-      break;
-    }
-    default:
-      return;
+    });
   }
-
-  event.preventDefault();
-}, true);
-
-
-		 /*******************************
-		 *     CONTROLLING A QUERY      *
-		 *******************************/
-
-abort.addEventListener('submit', (e) => {
-  e.preventDefault();
-  if ( yield && yield.abort )
-  { console.log("aborting", yield);
-    yield.abort();
-  } else
-  { console.log("Requesting abort");
-    abort_request = true;
-  }
-}, false);
-
-// Next/Stop
-
-function reply_more(action)
-{ if ( yield && yield.yield == "more" )
-  { switch(action)
-    { case "redo":     print_output(";", "stdout"); next_answer(); break;
-      case "continue": print_output(".", "stdout"); answer_ignore_nl = true; break;
-    }
-    next(yield.resume(action));
-  }
-}
+} // end class Input
 
 		 /*******************************
 		 *            TRACER            *
 		 *******************************/
-
-function reply_trace(action)
-{ if ( yield && yield.yield == "trace" )
-  { print_output(` [${action}]`, "stderr", {color: "#888"});
-    Prolog.call("nl(user_error)", {nodebug:true});
-
-    switch(action)
-    { case "goals":
-      case "listing":
-      case "help":
-      { trace_action(action, yield.trace_event);
-	break;
-      }
-      default:
-      { set_state("run");
-	next(yield.resume(action));
-      }
-    }
-  }
-}
-
-function trace_action(action, msg)
-{ const prolog = Prolog;
-
-  return prolog.with_frame(() =>
-  { const av = prolog.new_term_ref(2);
-
-    prolog.put_chars(av+0, action, prolog.PL_ATOM);
-    prolog.bindings.PL_put_term(av+1, msg);
-    const flags = prolog.PL_Q_NODEBUG;
-    const pred  = prolog.predicate("tinker:trace_action/2");
-    const qid   = prolog.bindings.PL_open_query(0, flags, pred, av);
-    const rc    = prolog.bindings.PL_next_solution(qid);
-    prolog.bindings.PL_close_query(qid);
-    return rc;
-  });
-}
 
 const trace_shortcuts = {
   " ":     "creep",
@@ -561,426 +1583,222 @@ const trace_shortcuts = {
   "?":	   "help"
 };
 
-trace.addEventListener("keyup", (ev) => {
-  if ( ev.defaultPrevented ) return;
-  const action = trace_shortcuts[ev.key];
-  if ( action )
-  { ev.preventDefault();
-    ev.stopPropagation();
-    reply_trace(action);
-  }
-});
 
 		 /*******************************
-		 *       TOPLEVEL STATES        *
+		 *        PERSIST FILES         *
 		 *******************************/
 
-function set_state(state)
-{ terminal.className = "console " + state;
-}
+/**
+ * Provide persistency of files and  query history using the browser's
+ * `localStorage` facility.  localStorage keys are:
+ *
+ *  - `<prefix>/history`
+ *  - `<prefix>/files`
+ *  - `<prefix>/file/<name>`
+ */
 
-function next(rc)
-{ yield = null;
+export class Persist {
+  autosave;			// Save on exit
+  map;				// key -> object
+  source;			// Associated Source instance
+  prefix;			// Key prefix
 
-  if ( rc.yield !== undefined )
-  { yield = rc;
+  /**
+   * @param {object} [options]
+   * @param {string} [options.prefix] Prefix for all keys.  Default is
+   * `"/tinker/"`
+   */
+  constructor(options) {
+    const self = this;
 
-    Prolog.flush_output();
+    options = options|{};
+    this.autosave = options.autosave !== undefined ? options.autosave : true;
+    this.prefix = options.prefix !== undefined ? options.prefix : "/tinker/";
+    this.map = {};
 
-    if ( abort_request )
-    { abort_request = false;
-      return next(yield.resume("wasm_abort"));
-    }
-
-    switch(rc.yield)
-    { case "beat":
-        return setTimeout(() => next(yield.resume("true")), 0);
-      case "query":
-        answer = undefined;
-        /*FALLTHROUGH*/
-      case "term":
-      case "line":
-        set_state("prompt "+rc.yield);
-        focusInput(input, rc.yield);
-        break;
-      case "more":
-        set_state("more");
-        document.getElementById("more.next").focus();
-        break;
-      case "trace":
-      { trace_action("print", yield.trace_event);
-        set_state("trace");
-        document.getElementById("trace.creep").focus();
-        break;
-      }
-      case "builtin":
-        rc.resume((rc)=>next(rc));
-        break;
-    }
-  } else if ( rc.error )
-  { if ( rc.message == "Execution Aborted" )
-    { Prolog.call("print_message(informational, unwind(abort))");
-    } else
-    { console.log("Unhandled exception; restarting", rc);
-    }
-    toplevel();
+    window.addEventListener("visibilitychange", () => {
+      if ( document.hidden && this.autosave )
+	self.persist();
+    });
   }
-}
 
-function toplevel()
-{ let rc = Prolog.call("wasm_query_loop",
-		       { async:true,
-			 debugger:true
-		       });
+  itemKey(name) {
+    return `${this.prefix}${name}`;
+  }
 
-  next(rc);
+  fileKey(name) {
+    return `${this.prefix}file${name}`;
+  }
+
+  /**
+   * Load  `name` from  localStorage and  use its  attributes to  fill
+   * `into`.  The object is registered such that it is saved back into
+   * the localStorage when the page is left.
+   *
+   * @param {string} name the localStorage key
+   * @param {object} into JavaScript object filled
+   * @param {string[]} [keys] Keys of `into` that must be saved.
+   * Defaults to the keys of `into`.
+   */
+  load(name, into, keys) {
+    this.map[name] = { data: into,
+		       keys: keys||Object.keys(into)
+		     };
+    const item = localStorage.getItem(this.itemKey(name));
+    if ( item ) {
+      const obj = JSON.parse(item);
+      for(let k of keys) {
+	if ( obj[k] !== undefined )
+	  into[k] = obj[k];
+      }
+    }
+  }
+
+  /**
+   * Save all objects registered with `load()` to the localStorage.
+   */
+  persistRegistered() {
+    for(let k of Object.keys(this.map)) {
+      const data = this.map[k].data;
+      const save = {};
+      for( let key of this.map[k].keys ) {
+	save[key] = data[key];
+      }
+      localStorage.setItem(this.itemKey(k), JSON.stringify(save));
+    }
+  }
+
+  removeFile(name) {
+    localStorage.removeItem(this.fileKey(name));
+  }
+
+  restoreFile(name)
+  { const content = localStorage.getItem(this.fileKey(name))||"";
+
+    if ( content || name == this.source.default_file )
+    { Module.FS.writeFile(name, content);
+      this.source.addFileOption(name);
+    } else
+    { this.source.files.list = this.source.files.list
+				.filter((n) => (n != name));
+    }
+  }
+
+  restoreFiles()
+  { const self = this;
+    let f = localStorage.getItem(this.itemKey("files"));
+    if ( f ) this.source.files = JSON.parse(f);
+
+    this.source.files.list.forEach((f) => self.restoreFile(f));
+    if ( !this.source.files.list.includes(this.source.default_file) )
+      this.source.files.list.unshift(this.source.default_file);
+
+    let current = this.source.files.current;
+    this.source.files.current = null;
+    this.source.switchToFile(current || this.source.default_file);
+  }
+
+  loadFile(name)
+  { name = name || this.source.files.current;
+
+    try
+    { let content = Module.FS.readFile(name, { encoding: 'utf8' });
+      this.source.value = content;
+    } catch(e)
+    { this.source.value = "";
+    }
+  }
+
+  persistsFile(name)
+  { if ( this.source.userFile(name) )
+    { try
+      { let content = Module.FS.readFile(name, { encoding: 'utf8' });
+	localStorage.setItem(this.fileKey(name), content);
+      } catch(e)
+      { localStorage.removeItem(this.fileKey(name));
+      }
+    }
+  }
+
+  persistFiles() {
+    this.source.ensureSavedCurrentFile();
+
+    const l = this.source.files.list.filter((n) => this.source.isUserFile(n));
+    const save =
+	  { list: l,
+	    current: l.includes(this.source.files.current)
+		? this.source.files.current
+		: this.source.default_file
+	  };
+
+    localStorage.setItem(this.itemKey("files"), JSON.stringify(save));
+
+    save.list.forEach((f) => this.persistsFile(f));
+  }
+
+  persist() {
+    this.persistRegistered();
+    if ( this.source )
+      this.persistFiles();
+  }
+
+  restore() {
+    if ( this.source )
+      this.restoreFiles();
+  }
 }
 
 		 /*******************************
 		 *         START PROLOG         *
 		 *******************************/
 
-let Prolog;
-let Module;
-var options = {
-  arguments: ['-g', 'true'],
-  locateFile: function(file) { // not needed with swipl-bundle.js
-    return '/wasm/' + file;
-  },
-  on_output: print_output
-};
+export class Tinker {
+  static prepared = false;	// Only do this once
+  persist;			// Persist instance
+  console;			// Console instance
+  source;			// Source instance
 
-SWIPL(options).then(async (module) =>
-    { Module = module;
+  /**
+   * @param {object} [options]
+   * @param {HTMLElement} [options.root] Root element below which to
+   * find and instantiate the components
+   * @param {object} [options.module] WASM module holding SWI-Prolog.
+   * __must__ be provided on first invocation.
+   * @param {bool} [options.banner] If `true`, print welcome banner.
+   */
+  constructor(options) {
+    options = options||{};
+    const root = options.root||document;
+    if ( !Module ) {
+      if ( !options.module )
+	throw new TypeError(`Module expected; found ${options.module}`);
+      Module = options.module;
       Prolog = Module.prolog;
-      Module.FS.mkdir(user_dir);
-      await Prolog.load_scripts();
-      await Prolog.consult("tinker.pl", {module:"system"});
-      Prolog.query("tinker:tinker_init(Dir)", {Dir:user_dir}).once();
-      Prolog.call("version");
-      initCodeMirror(toplevel);
-    });
+    }
 
-async function addExamples()
-{ const json = await fetch("examples/index.json").then((r) =>
-  { return r.json();
-  });
+    this.persist = new Persist();
+    this.console = new Console(root.querySelector("div.tinker-console"),
+			       { persist: this.persist
+			       });
+    this.source  = new Source(root.querySelector("div.tinker-source"),
+			      { persist: this.persist,
+				console: this.console
+			      });
+    Prolog.console = this.console; // TODO: Allow for multiple consoles?
 
-  if ( Array.isArray(json) && json.length > 0 )
-  { const select = select_file;
-    const sep = document.createElement("option");
-    sep.textContent = "Demos";
-    sep.disabled = true;
-    select.appendChild(sep);
-
-    json.forEach((ex) =>
-      { if ( !hasFileOption(select, user_file(ex.name)) )
-	{ const opt = document.createElement("option");
-	  opt.className = "url";
-	  opt.value = "/wasm/examples/"+ex.name;
-	  opt.textContent = (ex.comment||ex.name) + " (demo)";
-	  select.appendChild(opt);
-	}
+    if ( !Tinker.prepared ) {
+      Tinker.prepared = true;
+      Prolog.consult("tinker.pl", {module:"system"}).then(() => {
+	Prolog.query("tinker:tinker_init(Dir)",
+		     {Dir:this.source.user_dir}).once();
+	if ( options.banner )
+	  Prolog.call("version");
+	this.console.addQuery();
       });
-  }
-}
-
-		 /*******************************
-		 *      EDITOR AND CONSULT      *
-		 *******************************/
-
-editor.addEventListener('submit', (e) => {
-  e.preventDefault();
-  saveFile(files.current);
-  query(`consult('${files.current}').`);
-}, false);
-
-document.getElementById('new-file').onclick = (e) => {
-  fname = document.getElementById("file-name");
-  e.preventDefault();
-  editor.className = "create-file";
-  e.target.disabled = true;
-  fname.value = "";
-  fname.focus();
-};
-
-document.getElementById('file-name').onkeydown = (e) => {
-  if ( e.key === "Enter" )
-  { e.preventDefault();
-    document.getElementById('create-button').click();
-  }
-};
-
-function deleteFile(file)
-{ const select = select_file;
-  const opt = hasFileOption(select, file);
-  let to = opt.nextElementSibling;
-  const sep = demoOptionSep(select);
-  if ( !to || to == sep )
-    to = opt.previousElementSibling;
-  if ( !to )
-    to = default_file;
-  switchToFile(to.value);
-  opt.parentNode.removeChild(opt);
-  files.list = files.list.filter((n) => (n != file));
-  localStorage.removeItem(file);
-  Module.FS.unlink(file);
-}
-
-document.getElementById('delete-file').onclick = (e) => {
-  e.preventDefault();
-  const del = selectedFile();
-
-  if ( del == default_file )
-  { alert("Cannot delete the default file");
-    return;
-  }
-  if ( !is_user_file(del) )
-  { alert("Cannot delete system files");
-    return;
-  }
-  deleteFile(del);
-};
-
-function baseName(path)
-{ return path.split("/").pop();
-}
-
-function hasFileOption(select, name)
-{ return Array.from(select.childNodes).find((n) => n.value == name );
-}
-
-function demoOptionSep(select)
-{ return Array.from(select_file.childNodes).find(
-  (n) => n.textContent == "Demos" && n.disabled);
-}
-
-function addFileOption(name)
-{ const select = select_file;
-
-  if ( !hasFileOption(select, name) )
-  { const node = document.createElement('option');
-    node.textContent = baseName(name);
-    node.value = name;
-    node.selected = true;
-    const sep = demoOptionSep(select);
-    if ( sep )
-      select.insertBefore(node, sep);
-    else
-      select.appendChild(node);
-  }
-}
-
-function switchToFile(name)
-{ let options = Array.from(select_file.childNodes);
-
-  options.forEach((e) => {
-    e.selected = e.value == name;
-  });
-
-  if ( files.current != name )
-  { if ( files.current )
-      saveFile(files.current);
-    files.current = name;
-    if ( !files.list.includes(name) )
-      files.list.push(name);
-    loadFile(name);
-    updateDownload(name);
-  }
-}
-
-document.getElementById('create-button').onclick = e => {
-  e.preventDefault();
-  let input = document.getElementById("file-name");
-  let name  = input.value.trim();
-
-  if ( /^[a-zA-Z 0-9.-_]+$/.test(name) )
-  { if ( ! /\.pl$/.test(name) )
-      name += ".pl";
-
-    name = user_file(name);
-
-    addFileOption(name);
-    switchToFile(name);
-
-    editor.className = "";
-    document.getElementById('new-file').disabled = false;
-  } else
-  { alert("No or invalid file name!");
-  }
-};
-
-function selectedFile()
-{ opt = select_file.options[select_file.selectedIndex];
-  return opt.value;
-}
-
-document.getElementById("select-file").onchange = (e) => {
-  opt = select_file.options[select_file.selectedIndex];
-
-  if ( opt.className == "url" )
-  { fetch(opt.value)
-    .then((res) => res.text())
-    .then((s) => {
-      const name = baseName(opt.value);
-      opt.className = "local";
-      opt.value = user_file(name);
-      opt.textContent = name;
-      Module.FS.writeFile(opt.value, s);
-      switchToFile(opt.value);
-    });
-  } else
-  { switchToFile(opt.value);
-  }
-}
-
-		 /*******************************
-		 *       UP AND DOWNLOAD        *
-		 *******************************/
-
-function updateDownload(name)
-{ const btn = document.querySelector("a.btn.download");
-  if ( btn )
-  { name = baseName(name);
-    btn.download = name;
-    btn.title = `Download ${name}`;
-    btn.href = "download";
-  }
-}
-
-document.querySelector("a.btn.download").addEventListener("click", (ev) => {
-  const text = cm.getValue();
-  const data = new Blob([text]);
-  const btn = ev.target;
-  btn.href = URL.createObjectURL(data);
-});
-
-function readAsText(file) {
-    return new Promise((resolve, reject) => {
-        const fr = new FileReader();
-        fr.onerror = reject;
-        fr.onload = () => {
-            resolve(fr.result);
-        }
-        fr.readAsText(file);
-    });
-}
-
-async function download_files(files)
-{ for(let i=0; i<files.length; i++)
-  { const file = files[i];
-    const content = await readAsText(file);
-    const name = user_file(baseName(file.name));
-    addFileOption(name);
-    switchToFile(name);
-    cm.setValue(content);
-    saveFile(name);
-  }
-}
-
-document.querySelector("a.btn.upload").addEventListener("click", (ev) => {
-  const exch = ev.target.closest("span.exch-files");
-  if ( exch.classList.contains("upload-armed") )
-  { const files = exch.querySelector('input.upload-file').files;
-    download_files(files).then(() => {
-      exch.classList.remove("upload-armed");
-    });
-  } else
-  { exch.classList.add("upload-armed")
-  }
-});
-
-		 /*******************************
-		 *        PERSIST FILES         *
-		 *******************************/
-
-function persistsFile(name)
-{ if ( is_user_file(name) )
-  { try
-    { let content = Module.FS.readFile(name, { encoding: 'utf8' });
-      localStorage.setItem(name, content);
-    } catch(e)
-    { localStorage.removeItem(name);
+    } else {
+      if ( options.banner )
+	Prolog.call("version");
+      this.console.addQuery();
     }
   }
-}
-
-function restoreFile(name)
-{ let content = localStorage.getItem(name)||"";
-
-  if ( content || name == default_file )
-  { Module.FS.writeFile(name, content);
-    addFileOption(name);
-  } else
-  { files.list = files.list.filter((n) => (n != name));
-  }
-}
-
-function restoreFiles()
-{ let f = localStorage.getItem("files");
-  if ( f ) files = JSON.parse(f);
-
-  files.list.forEach((f) => restoreFile(f));
-  if ( !files.list.includes(default_file) )
-    files.list.unshift(default_file);
-
-  let current = files.current;
-  files.current = null;
-  switchToFile(current || default_file);
-}
-
-function loadFile(name)
-{ name = name || files.current;
-
-  try
-  { let content = Module.FS.readFile(name, { encoding: 'utf8' });
-    cm.setValue(content);
-  } catch(e)
-  { cm.setValue("");
-  }
-}
-
-function saveFile(name, force)
-{ if ( force || is_user_file(name) )
-  { Module.FS.writeFile(name, cm.getValue());
-  }
-}
-
-let autosave = true;
-
-window.onunload = (e) =>
-{ if ( autosave )
-  { localStorage.setItem("history", JSON.stringify(history));
-    const l = files.list.filter((n) => is_user_file(n)||n == default_file);
-    const save =
-	  { list: l,
-	    current: l.includes(files.current) ? files.current : default_file
-	  };
-
-    localStorage.setItem("files",   JSON.stringify(save));
-
-    save.list.forEach((f) => persistsFile(f));
-  }
-}
-
-(function restore()
-{ let h = localStorage.getItem("history");
-
-  if ( h ) history = JSON.parse(h);
-})();
-
-		 /*******************************
-		 *          DEMO CALLS          *
-		 *******************************/
-
-function add_one(n)
-{ return n+1;
-}
-
-function promise_any(data)
-{ console.log(data);
-
-  return new Promise(function(resolve, reject)
-  { resolve(data);
-  });
 }
