@@ -34,17 +34,18 @@
 
 :- module(tinker,
           [ cls/0,		%
+            pp/1,               % +Term
             html/1,		% +HTMLTerm
             tinker_run/2,	% +TinkerQuery, :QueryString
-            tinker_query/1      % -TinkerQuery
+            tinker_query/1,     % -TinkerQuery
+            dump_var/2
           ]).
 :- use_module(library(wasm)).
 :- use_module(library(prolog_wrap), [wrap_predicate/4]).
-:- use_module(library(ansi_term), []).
+:- use_module(library(ansi_term), [ansi_format/3]).
 :- use_module(library(debug), [debug/3]).
 :- use_module(library(uri), [uri_is_global/1]).
 :- use_module(library(option), [option/2]).
-
 :- autoload(library(apply), [maplist/3]).
 :- autoload(library(listing), [listing/1]).
 :- autoload(library(pairs), [transpose_pairs/2, group_pairs_by_key/2]).
@@ -55,6 +56,7 @@
 :- autoload(library(http/html_write), [html/3, print_html/1]).
 :- autoload(library(ansi_term), [ansi_format/3]).
 :- autoload(library(lists), [append/3]).
+:- autoload(library(pprint), [print_term/2]).
 
 :- meta_predicate
     html(:),
@@ -384,6 +386,34 @@ complete_input(Before,After,Delete,Completions) :-
     !,
     prolog:complete_input(Before,After,Delete,Completions).
 
+%!  pp(@Term) is det.
+%
+%   Pretty print a term to the  console.   When  used  in a clause, call
+%   dump_var/2 to add the name.
+
+user:goal_expansion(pp(Term), Pos, dump_var(Name, Term), Pos) :-
+%	prolog_load_context(term_position, Start),
+	var_property(Term, name(Name)).
+
+pp(Term) :-
+	print_term(Term, [output(user_error)]).
+
+%!  dump_var(+Name, @Value) is det.
+
+dump_var(Name, Value) :-
+	with_output_to(user_error, dump_var2(Name, Value)).
+
+dump_var2(Name, Value) :-
+	format('~N'),
+	ansi_format([bold,fg(magenta)], '~w', [Name]),
+	format(' = '),
+	atom_length(Name, NameLen),
+	LeftMargin is NameLen + 3,
+	print_term(Value,
+		   [ output(current_output),
+		     left_margin(LeftMargin)
+		   ]),
+	nl.
 
                 /*******************************
                 *         HTML SUPPORT         *
