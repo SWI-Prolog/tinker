@@ -793,31 +793,36 @@ export class Console {
   }
 
   #getCharSize(element) {
-    if ( !element.char_size )
-    { let temp = document.createElement("span");
+    if ( !element.data )
+      element.data = {};
+    if ( !element.data.char_size ) {
+      let temp = document.createElement("span");
       temp.className = "stdout";
       temp.textContent = "test";
       element.appendChild(temp);
       const rect = temp.getBoundingClientRect();
-      element.char_size = { h: rect.height,
-			    w: rect.width/4
-			  };
+      element.data.char_size = { h: rect.height,
+				 w: rect.width/4
+			       };
       element.removeChild(temp);
     }
-    return element.char_size;
+    return element.data.char_size;
   }
 
   /**
    * Determine the size in (character) rows and columns of the
    * console.  This is used by the Prolog predicate `tty_size/2`.
-   * @return {Array} holding [rows, columns]
+   * @return {Array|undefined} holding [rows, columns]
    */
   tty_size() {
-    const wrapper = this.elem.closest("div.scroll-wrapper");
-    const charsz = this.#getCharSize(this.output);
-    return [ Math.floor(wrapper.clientHeight/charsz.h),
-	     Math.floor(wrapper.clientWidth/charsz.w)
-	   ];
+    if ( this.output ) {
+      const charsz = this.#getCharSize(this.output);
+      const wrapper = this.elem.closest("div.tinker-console-wrapper");
+      if ( charsz && wrapper )
+	return [ Math.floor(wrapper.clientHeight/charsz.h),
+		 Math.floor(wrapper.clientWidth/charsz.w)
+	       ];
+    }
   }
 
   /**
