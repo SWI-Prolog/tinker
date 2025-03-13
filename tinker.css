@@ -70,7 +70,7 @@ div.tinker-source {
 .source-files button, .source-files select { height: 26px; }
 .source-files select option.url { color: blue; }
 .source-files .create-file { display: none; }
-form[name=source].create-file .source-files .create-file { display: inline; }
+.tinker-source.create-file .source-files .create-file { display: inline; }
 
 .editor-wrapper {
     border: 1px solid black;
