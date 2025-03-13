@@ -25,14 +25,12 @@
 <div class="header">
   <img id="logo" alt="SWI-Prolog logo" src="https://www.swi-prolog.org/download/logo/swipl-128.png">
   <div>
-    This is <a href="https://www.swi-prolog.org"
-    target="_blank">SWI-Tinker</a>, a version
-    of <a href="https://www.swi-prolog.org"
-    target="_blank">SWI-Prolog</a> compiled to
-    <a href="https://webassembly.org/" target="_blank">WASM</a></div>
-  <div>Beta version.
-  See <a href="https://swi-prolog.discourse.group/t/swi-prolog-in-the-browser-using-wasm"
-	 target="_blank">Wiki on Discourse</a> for status and usage</div>
+    This is <a href="https://github.com/SWI-Prolog/tinker"
+    target="_blank">SWI-Tinker</a>: 
+    <a href="https://www.swi-prolog.org"
+    target="_blank">SWI-Prolog</a> running inside your browser</div>
+  <div>Please consult our <a href="https://github.com/SWI-Prolog/tinker/wiki"
+			     target="_blank">Wiki for help</a></div>
 <div class="github-buttons">
   <a class="github-button" href="https://github.com/SWI-Prolog/tinker" data-color-scheme="no-preference: light; light: light; dark: dark;" data-size="large" data-show-count="true" aria-label="Star SWI-Prolog/tinker on GitHub">Star</a>
 </div>
@@ -105,6 +103,8 @@
 
   let Prolog;
   let Module;
+  let Tinker;
+  
   var options = {
     arguments: ['-g', 'true'],
     locateFile: function(file) { // not needed with swipl-bundle.js
@@ -114,17 +114,16 @@
   };
 
   function print_output(line, cls, sgr) {
-    Prolog.console.print(line, cls, sgr);
+    Tinker.console.print(line, cls, sgr);
   }
 
   SWIPL(options).then(async (module) => {
     Module = module;
     window.prolog = Prolog = Module.prolog;
-    await Prolog.load_scripts();
-    new tinker.Tinker({ root:document.querySelector("div.content"),
-			module:module,
-			banner:true
-		      });
+    Tinker = new tinker.Tinker({ root:document.querySelector("div.content"),
+				 module:module,
+				 banner:true
+			       });
   });
 
 </script>

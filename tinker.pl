@@ -202,7 +202,7 @@ trace_action(listing, frame(Frame,_Choice,_Port,_PC)) =>
     prolog_frame_attribute(Frame, predicate_indicator, Pred),
     listing(Pred).
 trace_action(help, _) =>
-    Actions := trace_shortcuts,
+    Actions := tinker.trace_shortcuts,
     dict_pairs(Actions, _, Pairs),
     transpose_pairs(Pairs, Transposed),
     group_pairs_by_key(Transposed, Grouped),

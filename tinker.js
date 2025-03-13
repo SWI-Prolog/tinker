@@ -32,17 +32,70 @@
     POSSIBILITY OF SUCH DAMAGE.
 */
 
+/**
+ * @file Run SWI-Prolog interactively in the browser
+ * @author Jan Wielemaker
+ *
+ * @description
+ * This  file  provides a  number  of  JavaScript classes  that  allow
+ * building interactive Prolog applications in a web page.  Below is a
+ * short introduction of the exported classes.
+ *
+ * ## Classes
+ *
+ *   - `Query` <br>
+ *     A query manages a Prolog query.  It allows for entering and
+ *     running a query.  It manages interaction (`read/1`, the
+ *     Prolog debugger, asking for more answers, etc.) and collects
+ *     both the answers and console output produced by running the
+ *     query.
+ *   - `Console`<br>
+ *     A console manages a number of `Query` instances.
+ *   - `Source`<br>
+ *     The source instance manages files, and editing files.  It uses
+ *     an instance of `Editor` to edit sources and an instance of
+ *     `Persist` to persist files from the virtual WASM file system
+ *     to the browser's localStorage.
+ *   - `Editor`<br>
+ *     Encapsulates an instance of [CodeMirror](https://codemirror.net/).
+ *   - `Input`<br>
+ *     Encapsulates an HTML `<input>` element and a prompt to read
+ *     queries, terms and lines.  It is embedded in a `Query` instance
+ *     and is sensitive to the query state.
+ *   - `Persist`<br>
+ *     Deals with saving files and the query history to the browser's
+ *     localStorage.
+ *   - `Tinker`<br>
+ *     Simple small class that binds the various components together
+ *     to establish [SWI-Tinker](https://wasm.swi-prolog.org/wasm/tinker)
+ *
+ * ## Design notes
+ *
+ * Except for class `Persist`, each instance controls an HTML element.
+ * This element  can be  accessed using the  `.elem` property  and the
+ * controlling instance  can be  found from `.data.instance`  from the
+ * HTML element.
+ */
+
 		 /*******************************
-		 *          COMPONENTS          *
+		 *            GLOBALS           *
 		 *******************************/
 
-const config = {
-  user_dir: "/prolog",
-  default_file_name: "scratch.pl"
-};
+/**
+ * WASM Module.  Instantiated by the `Tinker` constructor from
+ * the `SWIPL` instantiation.
+ * @type {SWIPL}
+ */
 
-let Module;
-let Prolog;
+let Module;			// The WASM module
+
+/**
+ * The one and only instance of class `Prolog` that is made available
+ * from the `SWIPL` `Module` instance as `Module.prolog`.
+ * @type {Prolog}
+ */
+
+let Prolog;			// The one and only Prolog instance
 
 		 /*******************************
 		 *            SOURCE            *
@@ -444,10 +497,18 @@ export class Source {
 
 /**
  * Encapsulate  the  editor.   In  this  case  the  actual  editor  is
- * CodeMirror.  Defines methods to
+ * [CodeMirror](https://codemirror.net/).  Defines methods to
+ *
  *   - Initialise the editor
- *   - Set and get its value
- *   - Go to a line/column
+ *   - Set and get its value {@link Editor#value}
+ *   - Go to a line/column {@link Editor#goto}
+ *
+ * By default, the editor instance is created by {@link Source} on the
+ * element named `editor` that must be part of the DOM used to create
+ * the {@link Source} instance.
+ *
+ * The CodeMirror code is downloaded from cdnjs.cloudflare.com and the
+ * Prolog mode from www.swi-prolog.org.
  */
 
 export class Editor {
@@ -455,6 +516,10 @@ export class Editor {
   static cm_swi = "https://www.swi-prolog.org/download/codemirror";
   CodeMirror;
 
+  /**
+   * @param {HTMLDivElement} container Element in which to create the editor
+   * @param {function} cont Call-back called when the editor is completed.
+   */
   constructor(container, cont) {
     const instance = this;
 
@@ -514,7 +579,8 @@ export class Editor {
   }
 
   /**
-   * Go to a given 1-based line number
+   * Go to a given 1-based line number.  The target line is styled
+   * in CSS using the `.CodeMirror-search-match` selector.
    *
    * @param {number} line
    * @param {Object} [options]
@@ -582,18 +648,35 @@ function el(sel, ...content) {
 		 *******************************/
 
 /**
- * A console is scrollable area that can handle queries.
+ * A Tinker `Console` is scrollable area that manages a list of {@link
+ * Query} instances.  It provides the following functionality:
+ *
+ *   - Capture Prolog's console output using {@link Console#print}
+ *   - Manage queries using {@link Console#addQuery} and {@link
+ *     Console#injectQuery}
+ *   - Manage and persist the query history as used by {@link Input},
+ *     the input field of {@link Query}
+ *   - Misc methods such as {@link Console#tty_size}, {@link Console#clear},
+ *     etc.
  */
 
 export class Console {
+  /** Element for output and {@link Query} instances
+   * @type {HTMLDivElement} */
   output;			// element to write in
   history;			// Query history
   persist;			// (History) persistency
 
   /**
-   * Create a Tinker console.
+   * Create a Tinker console.  The console is created from an `<div>`
+   * element.  The constructor realizes terminal-style automatic
+   * scrolling and adds a `<div.tinker-console-output>` that is
+   * accessible through {@link Console#output} to which console output
+   * (Prolog output to `current_output` and `current_error`) is
+   * appended and to which instances of {@link Query} are added.
+   *
    * @param {HTMLDivElement} elem Element that is wrapped to
-   * provide a scrollable area and prepared for addding
+   * provide a scrollable area and prepared for adding
    * instances of `Query`.
    * @param {object} [options]
    * @param {Persist} [options.persist] `Persist` instance used to load
@@ -625,54 +708,13 @@ export class Console {
       this.persist.load("history", this.history, ["stack"]);
   }
 
-  pushHistory(line) {
-    if ( this.history.stack.length == 0 ||
-	 this.history.stack[this.history.stack.length-1] != line )
-      this.history.stack.push(line);
-    this.history.current = null;
-  }
-
-  upHistory(line) {
-    if ( this.history.current == null ) {
-      this.history.saved = line;
-      this.history.current = this.history.stack.length;
-    }
-    if ( --this.history.current >= 0 ) {
-      return this.history.stack[this.history.current];
-    }
-  }
-
-  downHistory() {
-    if ( this.history.current != null ) {
-      if ( this.history.current+1 < this.history.stack.length ) {
-	this.history.current++;
-	return this.history.stack[this.history.current];
-      } else if ( this.history.saved !== undefined ) {
-	const val = this.history.saved;
-	this.history.saved = undefined;
-	return val;
-      }
-    }
-  }
-
   /**
-   * @return {Query} Last query displayed on the console.
-   * `undefined` if there is no last query
-   */
-  lastQuery() {
-    const q = this.output.lastChild;
-    while(q) {
-      if ( q.classList.contains("tinker-query") && q.data )
-	return q.data.query;
-      q = q.previousElementSibling;
-    }
-  }
-
-  /**
-   * Add a  new query.  This  presents a  prompt.  After the  query is
+   * Add a  new {@link Query}.  This  presents a  prompt.  After the  query is
    * entered, it  will be executed in  the context of this  query.  If
    * there is already a query with read state, select that.
-   * @param {bool} [focus] If `false`, do not focus the new query
+   * @param {object} [options]
+   * @param {bool} [options.focus] If `false`, do not focus the new query
+   * @param {string} [options.placeholder] Placeholder for the query.
    */
 
   addQuery(options) {
@@ -680,7 +722,7 @@ export class Console {
     const open = this.elem.querySelector("div.tinker-query.read.query");
     if ( open ) {
       if ( options.focus !== false )
-	open.data.query.input.focus("query");
+	open.data.instance.input.focus("query");
     } else {
       const q = new Query();
       this.output.appendChild(q.elem);
@@ -711,6 +753,14 @@ export class Console {
     }
   }
 
+  /**
+   * {@link Query} instance associated with the currently running
+   * query.  This can be accessed inside Tinker using the Prolog
+   * predicate `tinker_query/1`.  It is also used by {@link
+   * Console#print} through {@link Console#currentAnswer} to determine
+   * the query into which to insert the output.
+   * @return {Query|undefined}
+   */
   currentQuery() {
     const e = Prolog.current_engine();
     if ( e )
@@ -718,9 +768,23 @@ export class Console {
   }
 
   /**
-   * @return {HTMLDivElement} that represents the `<div>` into which
-   * the current answer must be written.  Returns `undefined` if there
-   * is no current open query.
+   * Bottom-most {@link Query} instance displayed on this console.
+   * @return {Query|undefined}
+   */
+  lastQuery() {
+    const q = this.output.lastChild;
+    while(q) {
+      if ( q.classList.contains("tinker-query") && q.data )
+	return q.data.instance;
+      q = q.previousElementSibling;
+    }
+  }
+
+  /**
+   * `<div>` into which the current answer must be written.  This is
+   * the last `<div.query-answer>` of the {@link Console#currentQuery}.
+   * New answer `<div>` elements are added by {@link Query#nextAnswer}.
+   * @return {HTMLDivElement|undefined}
    */
   currentAnswer() {
     let q;
@@ -744,6 +808,8 @@ export class Console {
   }
 
   /**
+   * Determine the size in (character) rows and columns of the
+   * console.  This is used by the Prolog predicate `tty_size/2`.
    * @return {Array} holding [rows, columns]
    */
   tty_size() {
@@ -755,7 +821,8 @@ export class Console {
   }
 
   /**
-   * Clear the console.  Leaves not completed queries alone.
+   * Clear the console.  This removes all output and all completed
+   * queries from the console.  Uncompleted queries not touched.
    */
   clear() {
     const rem = [];
@@ -770,11 +837,19 @@ export class Console {
   }
 
   /**
-   * Print a string to the console.
+   * Print a string to the console.  This method can be called from
+   * a function registered using the `on_output` method of the `SWIPL`
+   * WASM module.  The methods creates a `<span>` element who's class
+   * is the `cls` parameter.  Element style is attached to deal with
+   * color, bold and underlining.  Finally, if the print is associated
+   * to a {@link Query}, the output is added to the current answer of
+   * the query.  Otherwise it is added to the {@link Console#output}
+   * `<div>`
+   *
    * @param {string} line content that must be printed
-   * @param {string} cls class (stream), one of "stdout" or "stderr"
+   * @param {string} cls class (stream), one of `"stdout"` or `"stderr"`
    * @param {object} [sgr] parsed ANSI sequence.  Currently provides
-   * color, bold, underline or link.
+   * `color`, `background_color`, `bold`, `underline` or `link`.
    */
   print(line, cls, sgr, query) {
     query = query||this.currentQuery();
@@ -833,8 +908,56 @@ export class Console {
   }
 
   /**
+   * Push an input line to the query history.  The line is _not_
+   * added if it is identical to the last line.
+   * @param {string} line Query to push to the history.
+   */
+  pushHistory(line) {
+    if ( this.history.stack.length == 0 ||
+	 this.history.stack[this.history.stack.length-1] != line )
+      this.history.stack.push(line);
+    this.history.current = null;
+  }
+
+  /**
+   * Go up to older events in the history.
+   * @param {string} line is the current content of the input line.
+   * This is preserved if we move to previous history events, such
+   * that it can be retrieved if we use {@link Console#downHistory}
+   * to go back to the very start.
+   * @return {string|undefined} Text to insert into the input
+   */
+
+  upHistory(line) {
+    if ( this.history.current == null ) {
+      this.history.saved = line;
+      this.history.current = this.history.stack.length;
+    }
+    if ( --this.history.current >= 0 ) {
+      return this.history.stack[this.history.current];
+    }
+  }
+
+  /**
+   * Go down to newer events in the history.
+   * @return {string|undefined} Text to insert into the input
+   */
+  downHistory() {
+    if ( this.history.current != null ) {
+      if ( this.history.current+1 < this.history.stack.length ) {
+	this.history.current++;
+	return this.history.stack[this.history.current];
+      } else if ( this.history.saved !== undefined ) {
+	const val = this.history.saved;
+	this.history.saved = undefined;
+	return val;
+      }
+    }
+  }
+
+  /**
    * Find the console instance from a nested element
-   * @return {Console}
+   * @return {Console|undefined}
    */
   static findConsole(from) {
     const elem = from.closest(".tinker-console");
@@ -853,24 +976,44 @@ const state_classes = [
 ];
 
 /**
- * Enter and control  a Prolog query life cycle.   The Tinker toplevel
- * adds an instance of this class  to Console.  The query shows itself
- * as an input  field using the `?-` prompt.  After  the user enters a
- * Prolog query and hits _Enter_,  the Query instance enters the `run`
- * state by calling `Prolog.call()`.
+ * Enter and control a Prolog query life cycle.  The Tinker toplevel
+ * adds an instance of this class to {@link Console}.  The query shows
+ * itself as an input field using the `?-` prompt.  After the user
+ * enters a Prolog query and hits _Enter_, the Query instance enters
+ * the `run` state by calling {@link Query#run}.
  *
  * The  `Query` instance  manages the  Prolog execution  based on  the
- * return  state   from  `Prolog.call()`  using   `Query.next()`.   If
+ * return  state   from  `Prolog.call()`  using   {@link Query#next}.   If
  * executing the query _yields_, asking  for user input, class `Query`
  * handles  the interaction  and resumes  the Prolog  execution.  This
  * process continues  until a  final state  is reached  (final answer,
- * failure or error).
+ * failure or error), after which {@link Query#completed} is called.
  */
 
 export class Query {
+  /**
+   * Element we control
+   * @type {HTMLDivElement}
+   */
   elem;				// div.query-container
+  /**
+   * Element that receives the output for the next answer generated
+   * by Prolog.
+   * @type {HTMLDivElement|undefined}
+   */
   answer;			// div.query-answer
+  /**
+   * Input field used to enter queries, terms and lines.
+   * @type {Input}
+   */
   input;			// Input
+  /**
+   * The Prolog _engine_ that runs this query.  It can be set using the
+   * `options` of the constructor.  Running the query using {@link Query#run}
+   * sets this member to the concrete Prolog engine associated with this
+   * query.
+   * @type {Prolog.Engine|boolean|undefined}
+   */
   engine;			// Prolog engine
   #state;			// "run", "more", "trace",
 				// "prompt query", "prompt term", "prompt line"
@@ -901,6 +1044,10 @@ export class Query {
    * </div>
    * ```
    * @param {string} [query] is the Prolog query to run.
+   * @param {object} [options]
+   * @param {Prolog.Engine|bool} [options.engine] Prolog engine on which
+   * to run the query.  If `true`, a temporary engine is used that is
+   * destroyed when the query is completed.
    */
   constructor(query, options) {
     options = options||{};
@@ -913,7 +1060,7 @@ export class Query {
 
     this.elem = el("div.tinker-query",
 		   hdr, ansl, ctrl);
-    this.elem.data = { query: this };
+    this.elem.data = { instance: this };
 
     this.#fillHeader(hdr);
     this.#fillControl(ctrl);
@@ -1009,16 +1156,22 @@ export class Query {
 
     next.addEventListener("click", (ev) => {
       ev.preventDefault();
-      self.reply_more("redo");
+      self.replyMore("redo");
     });
     stop.addEventListener("click", (ev) => {
       ev.preventDefault();
-      self.reply_more("continue");
+      self.replyMore("continue");
     });
 
     return elem;
   }
 
+  /**
+   * Activated after the query completes non-deterministically.  This
+   * shows `<div.tinker-more>` control and focusses
+   * `<button.more-next>` therein.  Activating one of these controls
+   * calls {@link Query#replyMore}.
+   */
   promptMore() {
     // this.elem.classList.add("more");
     this.state = "more";
@@ -1032,7 +1185,7 @@ export class Query {
       const btn = el(`button.${action}`, label);
       btn.title = title;
       btn.addEventListener("click", () => {
-	self.reply_trace(action);
+	self.replyTrace(action);
       });
       return btn;
     }
@@ -1050,7 +1203,7 @@ export class Query {
       if ( action )
       { ev.preventDefault();
 	ev.stopPropagation();
-	self.reply_trace(action);
+	self.replyTrace(action);
       }
     });
 
@@ -1072,7 +1225,9 @@ export class Query {
   }
 
   /**
-   * Get a single character
+   * Implements `get_single_char/1` by showing a keyboard icon and
+   * waiting for the user to type a character.
+   * @return {number} code of the key pressed.
    */
   async get_single_char() {
     const kbd = this.elem.querySelector("div.tinker-keyboard");
@@ -1092,7 +1247,9 @@ export class Query {
   }
 
   /**
-   * Set/clear.toggle the collapsed state of the query
+   * Set/clear.toggle the collapsed state of the query.
+   * @param {bool} [how] If provided, set the collapsed state
+   * accordingly.  If omitted, toggle the collapsed state.
    */
   collapsed(how) {
     if ( how === true )
@@ -1127,20 +1284,29 @@ export class Query {
 
   /**
    * Find the  query before this  one.  Currently, we do  not consider
-   * the state of the query.
-   * @return {Query}
+   * the state of the query.  This is used to collapse the query before
+   * the latest when the latest starts executing.
+   * @return {Query|undefined}
    */
   previous() {
     let node = this.elem.previousElementSibling;
     while(node) {
       if ( node.classList.contains("tinker-query") )
-	return node.data.query;
+	return node.data.instance;
       node = node.previousElementSibling;
     }
   }
 
   /**
-   * Read a query.  This is done to start with an empty query.
+   * Put the query in `"read query"` state.  In this mode it only
+   * shows its {@link Input} element.  After the user submits a
+   * Prolog query the Input element activates {@link Query#handleUserInput},
+   * which in turn calls {@Query#run} to start Prolog.
+   * @param {object} [options]
+   * @param {bool}   [options.focus] If `false`, do not focus the
+   * {@link Input} element.
+   * @param {string} [options.placeholder] Set the placeholder for
+   * the {@link Input} element.
    */
 
   read(options) {
@@ -1193,8 +1359,8 @@ export class Query {
 
   /**
    * Handle the return of Prolog.call().  This is a success, failure,
-   * error or yield code.
-   * @param {object} rc Result from Prolog.call() using `async:true`.
+   * error or a yield code.
+   * @param {object} rc Result from {@link Prolog#call} using `async:true`.
    */
 
   next(rc) {
@@ -1259,6 +1425,19 @@ export class Query {
     }
   }
 
+  /**
+   * Called with the embedded {@link Input} element is submitted.
+   * That action depends on {@link Query#state}.  Notably when in
+   * `"read query"` mode, it uses {@link Query#run} to start the query
+   * and when used as prompt for a Prolog call to `read/1`,
+   * `get_code/1`, etc. it resumes the Prolog engine with the entered
+   * line.
+   *
+   * @param {string} line Line entered by the user.
+   * @param {Event} event is the event that trigged the submit.  This
+   * can be used to check modifiers such as `event.shiftKey`.  Notably
+   * a query entered with SHIFT is executed on a new engine.
+   */
   handleUserInput(line, event) {
     switch(this.state)
     { case "read query":
@@ -1278,7 +1457,7 @@ export class Query {
    * Add a `div.query-answer` element to capture the output and
    * solution of the next answer.
    */
-  next_answer() {
+  nextAnswer() {
     if ( this.answer ) {
       const ans = document.createElement("div");
       ans.className = "query-answer";
@@ -1289,14 +1468,17 @@ export class Query {
   }
 
   /**
-   * Handle the "Next"/"Stop" buttons
+   * Handle the __Next/Stop__ buttons that are displayed after the
+   * current query finishes non-deterministically.
+   * @param {string} action Tells Prolog how to continue.  Currently
+   * supports `"redo"` (Next), and `"continue"` (Stop).
    */
-  reply_more(action) {
+  replyMore(action) {
     if ( this.waitfor && this.waitfor.yield == "more" ) {
       switch(action)
       { case "redo":
 	{ this.print(";", "stdout");
-	  this.next_answer();
+	  this.nextAnswer();
 	  break;
 	}
 	case "continue":
@@ -1316,7 +1498,7 @@ export class Query {
       return Prolog.call(query, options);
   }
 
-  reply_trace(action) {
+  replyTrace(action) {
     if ( this.waitfor && this.waitfor.yield == "trace" ) {
       this.print(` [${action}]`, "stderr", {color: "#888"});
       this.call("nl(user_error)", {nodebug:true});
@@ -1337,7 +1519,10 @@ export class Query {
   }
 
   /**
-   * Call tinker.trace_action(action, msg)
+   * Call tinker:trace_action(action, msg)
+   * @param {string} action is the trace action to perform
+   * @param {number} msg is the Prolog `term_t` handle holding the
+   * trace event context.
    */
   trace_action(action, msg) {
     const self = this;
@@ -1364,12 +1549,10 @@ export class Query {
     });
   }
 
-  addNextQuery(options) {
-    this.console.addQuery(options);
-  }
-
   /**
-   * The query we are running has been completed.
+   * The query we are running has been completed.  This sets the
+   * state to `"complete"` and calls {@link Query#addNextQuery}
+   * to add a new query to the {@link Console} this query belongs to.
    */
   completed() {
     this.state = "complete";
@@ -1377,10 +1560,27 @@ export class Query {
     this.addNextQuery();
   }
 
+  /**
+   * Calls {@link Console#addQuery} on the console to which this query
+   * belongs.
+   */
+  addNextQuery(options) {
+    this.console.addQuery(options);
+  }
+
+  /**
+   * Calls {@link Console#print} on the console to which this query
+   * belongs.
+   */
   print(line, cls, sgr) {
     this.console.print(line, cls, sgr, this);
   }
 
+  /**
+   * Calls {@link Console#tty_size} on the console to which
+   * this query belongs.
+   * @return {Array|undefined}
+   */
   tty_size() {
     const con = Console.findConsole(this.elem);
     if ( con )
@@ -1394,14 +1594,35 @@ export class Query {
 		 *******************************/
 
 /**
- * Handle term  input for  the toplevel.  This  deals with  entering a
- * query, read/1 and friends and reading a line of input.
+ * Handle term and line input for a {@link Query}.  This deals with
+ * entering a query, read/1 and friends and reading a line of input.
  */
 
 export class Input {
+  /** Element controlled by this instance
+   * @type {HTMLDivElement}
+   */
   elem;
-  target;			// "query", "term", or "line"
+  /**
+   * "Thing" we are requested to read.  One of `"query"`, `"term"`, or
+   * `"line"`
+   * @type {string}
+   */
+  target;
 
+  /**
+   * Create the HTML DOM and register the event handlers.  The
+   * structure is
+   * ```
+   * <div class="tinker-input">
+   *   <span class="prompt">?- </span>
+   *   <input>
+   * </div>
+   * ```
+   *
+   * The constructor calls {@link Input#armInput} and {@link
+   * Input#armCompletion} to register event handling.
+   */
   constructor() {
     const input = el("input");
     this.elem = el("div.tinker-input",
@@ -1416,6 +1637,10 @@ export class Input {
     this.armCompletion();
   }
 
+  /**
+   * Value (text) of the `<input>` element.
+   * @type {string}
+   */
   get value() {
     const input = this.elem.querySelector("input");
     return input.value;
@@ -1426,22 +1651,36 @@ export class Input {
     return input.value = val;
   }
 
+  /**
+   * Placeholder of the `<input>` element.
+   * @type {string}
+   */
   set placeholder(val) {
     const input = this.elem.querySelector("input");
     return input.placeholder = val;
   }
 
-  query() {
-    return this.elem.closest(".tinker-query").data.query;
+  /**
+   * Read-only property returning the {@link Query} instance
+   * this input belongs to.
+   * @type {Query}
+   */
+  get query() {
+    return this.elem.closest(".tinker-query").data.instance;
   }
 
   /**
-   * Resume Prolog using the entered item as a string
+   * Submit the input line.  If the `target` is `"query"` or `"term"`,
+   * add a full stop if the input is not terminated by a full stop.
+   * If the `target` is `"query"` and there is an associated {@link
+   * Console}, push the line to the _history_.  Finally, call {@link
+   * Query#handleUserInput} to make the {@link Query} object act on
+   * the input.
+   * @param {Event} event Event that triggered the submit.
    */
   submit(event) {
-    const input = this.elem.querySelector("input");
-    let query = input.value;
-    input.value = '';
+    let query = this.value;
+    this.value = '';
 
     if ( this.target == "query" ||
 	 this.target == "term" ) {
@@ -1454,16 +1693,19 @@ export class Input {
 
       if ( this.target == "query" ) {
 	const con = Console.findConsole(this.elem);
-	con.pushHistory(query);
+	if ( con )
+	  con.pushHistory(query);
       }
     }
-    const q = this.query();
-    q.handleUserInput(query, event);
+
+    this.query.handleUserInput(query, event);
   }
 
   /**
-   * focus the input element
-   * @param {string} target is one of "query", "term" or "line"
+   * focus the input element and set the prompt and placeholder based
+   * in the requested target.  The prompt is requested from Prolog and
+   * can be set using `prompt/2` or `prompt1/1`.
+   * @param {string} target is one of `"query", `"term"` or `"line"`
    */
   focus(target) {
     const input  = this.elem.querySelector("input");
@@ -1486,7 +1728,7 @@ export class Input {
 
   /**
    * Handle allow  keys for  history and Enter  to submit  the current
-   * input.
+   * input.  This method is called by the constructor.
    */
   armInput() {
     const input = this.elem.querySelector("input");
@@ -1521,7 +1763,8 @@ export class Input {
   }
 
   /**
-   * Enable Tab-based completion on the element
+   * Enable Tab-based completion on the element.  This method is
+   * called by the constructor.
    * @todo show possible completions in case there are multiple.
    */
   armCompletion() {
@@ -1568,7 +1811,13 @@ export class Input {
 		 *            TRACER            *
 		 *******************************/
 
-const trace_shortcuts = {
+/**
+ * Mapping from keys  to Prolog trace events.  This  is exported, such
+ * that Prolog can use this to print the trace help commands.
+ * @type {object}
+ */
+
+export const trace_shortcuts = {
   " ":     "creep",
   "Enter": "creep",
   "a":	   "abort",
@@ -1595,16 +1844,27 @@ const trace_shortcuts = {
  *  - `<prefix>/history`
  *  - `<prefix>/files`
  *  - `<prefix>/file/<name>`
+ *
+ *  File storage in  the WASM virtual file system  and its persistency
+ *  in the localStorage is based  on communication with the associated
+ *  {@link Source} instance.
  */
 
 export class Persist {
+  /**
+   * The {@link Source} instance I'm associated with.  This is
+   * set by the constructor of the {@link Source} class.
+   * @type {Source}
+   */
+  source;			// Associated Source instance
   autosave;			// Save on exit
   map;				// key -> object
-  source;			// Associated Source instance
   prefix;			// Key prefix
 
   /**
    * @param {object} [options]
+   * @param {bool} [options.autosave] If `true` (default), save state on
+   * `visibilitychange` to `hidden` event.
    * @param {string} [options.prefix] Prefix for all keys.  Default is
    * `"/tinker/"`
    */
@@ -1752,17 +2012,41 @@ export class Persist {
 		 *         START PROLOG         *
 		 *******************************/
 
+/**
+ * The `Tinker` class puts it all together and can be considered an
+ * example on how the other classes can be used.
+ */
+
 export class Tinker {
   static prepared = false;	// Only do this once
+  /**
+   * @type {Persist}
+   */
   persist;			// Persist instance
+  /**
+   * @type {Console}
+   */
   console;			// Console instance
+  /**
+   * @type {Source}
+   */
   source;			// Source instance
 
   /**
+   * Instantiate `Tinker` from an HTML DOM tree.   See `tinker.html`
+   * for the structure of this DOM.  The {@link Source} is created
+   * in a `<div>` with class `tinker-source`.  This `<div>` decides
+   * in the layout and supported components.
+   *
+   * On first call,  the `SWIPL` WASM Module must be  passed in.  This
+   * is used to initialise the  global variables `Module` and `Prolog`
+   * in this module. as  well as to load the Prolog  part of tinker as
+   * `tinker.pl`
+   *
    * @param {object} [options]
    * @param {HTMLElement} [options.root] Root element below which to
    * find and instantiate the components
-   * @param {object} [options.module] WASM module holding SWI-Prolog.
+   * @param {SWIPL} [options.module] WASM module holding SWI-Prolog.
    * __must__ be provided on first invocation.
    * @param {bool} [options.banner] If `true`, print welcome banner.
    */
@@ -1776,6 +2060,7 @@ export class Tinker {
       Prolog = Module.prolog;
     }
 
+    // Create the components
     this.persist = new Persist();
     this.console = new Console(root.querySelector("div.tinker-console"),
 			       { persist: this.persist
@@ -1784,8 +2069,8 @@ export class Tinker {
 			      { persist: this.persist,
 				console: this.console
 			      });
-    Prolog.console = this.console; // TODO: Allow for multiple consoles?
 
+    // Prepare SWI-Prolog
     if ( !Tinker.prepared ) {
       Tinker.prepared = true;
       Prolog.consult("tinker.pl", {module:"system"}).then(() => {
