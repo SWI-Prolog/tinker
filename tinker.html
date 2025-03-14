@@ -17,6 +17,7 @@
   <title>SWI-Tinker</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.9/codemirror.css">
   <link rel="stylesheet" href="tinker.css">
+  <link rel="stylesheet" href="term.css">
   <link rel="icon" type="image/x-icon" href="https://www.swi-prolog.org/download/logo/swipl-64x64.ico">
   <script crossorigin="anonymous" async defer src="https://buttons.github.io/buttons.js"></script>
 </head>
@@ -99,11 +100,13 @@
 <!-- Glue it all together -->
 <script type="module">
   import * as tinker from "./tinker.js";
+  import * as term from "./term.js";
   window.tinker = tinker;
 
   let Prolog;
   let Module;
   let Tinker;
+  let Term;
   
   var options = {
     arguments: ['-g', 'true'],
@@ -124,6 +127,7 @@
 				 module:module,
 				 banner:true
 			       });
+    Term = new term.Term(Tinker.console.elem);
   });
 
 </script>

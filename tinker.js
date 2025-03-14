@@ -523,14 +523,6 @@ export class Editor {
   constructor(container, cont) {
     const instance = this;
 
-    function loadCss(url)
-    { const link = document.createElement("link");
-      link.type = "text/css";
-      link.rel = "stylesheet";
-      link.href = url;
-      document.getElementsByTagName("head")[0].appendChild(link);
-    }
-
     function cm_url(sub) {
       return Editor.cm_url + sub;
     }
@@ -554,7 +546,7 @@ export class Editor {
 	      cont.call(this.cm);
 	    });
 
-    loadCss(cm_swi("/theme/prolog.css"));
+    loadCSS(cm_swi("/theme/prolog.css"));
   }
 
   createCM(container) {
@@ -641,6 +633,14 @@ function el(sel, ...content) {
     elem.appendChild(e);
   }
   return elem;
+}
+
+function loadCSS(url)
+{ const link = document.createElement("link");
+  link.type = "text/css";
+  link.rel = "stylesheet";
+  link.href = url;
+  document.head.appendChild(link);
 }
 
 		 /*******************************

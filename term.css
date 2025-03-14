@@ -1,0 +1,238 @@
+/* Must be synchronized with codemirror/theme/prolog.css,
+   which uses `.cm-s-prolog span.cm-atom`, etc.
+*/
+
+.pl-ellipsis      {color:blue; text-decoration:underline;}
+.pl-functor:hover {color:blue; text-decoration:underline;}
+.pl-infix:hover   {color:blue; text-decoration:underline;}
+.pl-var		  {color:#800;}  /* Normal variable */
+.pl-ovar	  {color:#800; font-weight: bold;}  /* Answer field output */
+.pl-anon	  {color:#800;}  /* _ */
+.pl-avar	  {color:#888;}  /* _GXXX */
+.pl-var		  {color:#800;}
+.pl-atom	  {color:#730;}
+.pl-quoted-atom   {color:#008; white-space:pre;}
+.pl-functor	  {color:#000; font-style: italic;}
+.pl-comment	  {color:#060; font-style: italic;}
+.pl-key		  {font-weight: bold;}
+
+.pl-active
+{ background: #cfc;
+}
+
+.pl-active > .pl-trigger
+{ font-weight: bold;
+}
+
+.pl-trigger:hover
+{ text-decoration: underline;
+}
+
+.pl-list-open
+{ padding: 0px 10px;
+  margin: 0px -10px;
+  position: relative;
+  z-index: 10;
+}
+
+.pl-adaptive.pl-active span.pl-punct
+{ font-weight: bold;
+  color: red;
+  background: yellow;
+}
+.pl-adaptive.pl-active .pl-adaptive:not(.pl-active) .pl-punct
+{ font-weight: initial;
+  color: initial;
+  background: initial;
+}
+
+.pl-adaptive
+{ position: relative;
+  display: inline-block;
+}
+
+span.pl-compound.fold > .pl-compound
+{ display: inline;
+  padding-left: 0px;
+  border-left: 0px;
+}
+span.pl-compound.fold > .pl-compound-args
+{ display: none;
+}
+
+span.pl-list.fold > .pl-list-el
+{ display: none;
+}
+
+span.pl-dict.fold > .pl-dict-body
+{ display: none;
+}
+
+span.pl-binding-value.fold > span
+{ display: none;
+}
+
+span.pl-binding-value.fold:after
+{ content: "...";
+}
+
+.pl-adaptive.vertical
+{ vertical-align: top;
+}
+.pl-compound.vertical > .pl-functor
+{ display: block;
+}
+.pl-compound.vertical > .pl-compound-args
+{ display: block;
+  padding-left: 1px;
+  border-left: 1px solid #aaa;
+}
+.pl-compound.vertical > .pl-compound-args > .pl-compound-arg
+{ display: block;
+  margin-left: 2ex;
+}
+.pl-compound.vertical > .pl-compound-close
+{ display: block;
+}
+
+.pl-op-seq.vertical > .pl-op-seq-el
+{ display: block;
+}
+
+.pl-list.vertical
+{ margin-left: 0.5ex;
+}
+
+.pl-list.vertical > .pl-list-el
+{ display: block;
+  margin-left: 1em;
+}
+
+.pl-list.vertical > .pl-list-open
+{ float: left;
+}
+
+.pl-dict.vertical > .pl-dict-body
+{ display: block;
+  padding-left: 1px;
+  border-left: 1px solid #aaa;
+}
+
+.pl-dict.vertical > .pl-dict-body > .pl-dict-kvs
+{ display: table;
+  margin-left: 2ex;
+}
+
+.pl-dict.vertical > .pl-dict-body > .pl-dict-kvs > .pl-dict-kv
+{ display: table-row;
+}
+
+.pl-dict.vertical > .pl-dict-body > .pl-dict-kvs > .pl-dict-kv > .pl-key,
+.pl-dict.vertical > .pl-dict-body > .pl-dict-kvs > .pl-dict-kv > .pl-dict-value
+{ display: table-cell;
+}
+
+.pl-dict.vertical > .pl-dict-body > .pl-dict-kvs > .pl-dict-kv > .pl-dict-value
+{ padding-left: 1em;
+}
+
+.pl-dict.vertical > .pl-dict-body > .pl-dict-close
+{ display: block;
+}
+
+.pl-adaptive:not(.vertical)
+{ vertical-align: initial;
+  padding-left: initial;
+  border-left: initial;
+}
+
+/* Embraced (...) items */
+
+span.pl-embrace.vertical
+{ display: inline-flex;
+  flex-direction: row;
+}
+
+span.pl-embrace:not(.vertical)
+{ display: initial;
+  flex-direction: initial;
+}
+
+span.pl-embrace.vertical span.pl-embraced
+{ display: flex;
+  position: relative;
+  left: 20px;
+}
+
+span.pl-embrace.vertical span.pl-embraced:before
+{ content: "";
+  position: absolute;
+  top: 0;
+  width: 20px;
+  height: 100%;
+  left: -20px;
+  background-image: url("left-parenthesis.svg");
+  background-position: 0 0;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+}
+
+span.pl-embrace.vertical span.pl-embraced:after
+{ content: "";
+  position: absolute;
+  top: 0;
+  width: 20px;
+  height: 100%;
+  left: 100%;
+  background-image: url("right-parenthesis.svg");
+  background-position: 0 0;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+}
+
+span.pl-embrace.vertical span.pl-parenthesis
+{ display: none;
+}
+
+/* Mode switching menu.  A bit inspired by Bootstrap, but independent thereof. */
+
+ul.pl-compound-menu
+{ background: #fff;
+  font-weight: initial;
+  font-style: initial;
+  font-size: 90%;
+  list-style-type: none;
+  padding: 0;
+  margin: 0;
+  border: 1px solid #888;
+  position: absolute;
+  z-index: 1000;
+}
+
+ul.pl-compound-menu span.icon {
+    display: inline-block;
+    padding-left: 5px;
+    width: 25px;
+}
+
+ul.pl-compound-menu > li
+{ padding: 1px 20px 1px 0px;
+  white-space: nowrap;
+}
+
+ul.pl-compound-menu > li:hover
+{ background: #ddd;
+}
+
+ul.pl-compound-menu > li
+{ cursor: pointer;
+  color: #333;
+}
+
+ul.pl-compound-menu > li.header
+{ padding-left: 30px;
+  font-weight: bold;
+  color: #000;
+  background-color: #ddd;
+}
+
