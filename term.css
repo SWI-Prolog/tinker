@@ -2,6 +2,11 @@
    which uses `.cm-s-prolog span.cm-atom`, etc.
 */
 
+/* Make write output wrap correctly */
+div.write span.pl-compound {
+    display: contents;
+}
+
 .pl-ellipsis      {color:blue; text-decoration:underline;}
 .pl-functor:hover {color:blue; text-decoration:underline;}
 .pl-infix:hover   {color:blue; text-decoration:underline;}

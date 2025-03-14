@@ -132,11 +132,15 @@ div.tinker-source {
 
 .tinker-console-output {
     font-family: monospace;
+    word-break: break-all;
+    overflow-wrap: break-word;
+    white-space: normal;
 }
 .stderr, .stdout, .query-header {
     white-space: pre-wrap;
     font-family: monospace;
-    overflow-wrap: anywhere;
+    word-break: break-all;
+    overflow-wrap: break-word;
 }
 .bold { font-weight: bold; }
 .underline { text-decoration: underline; }
