@@ -3,7 +3,7 @@
 */
 
 /* Make write output wrap correctly */
-div.write span.pl-compound {
+div.write span.pl-adaptive {
     display: contents;
 }
 
@@ -21,7 +21,12 @@ div.write span.pl-compound {
 .pl-comment	  {color:#060; font-style: italic;}
 .pl-key		  {font-weight: bold;}
 
-.pl-active
+.pl-infix-op > .pl-functor {
+    display: inline-block;
+    padding: 0px 3px;
+}
+
+span.pl-active *
 { background: #cfc;
 }
 
