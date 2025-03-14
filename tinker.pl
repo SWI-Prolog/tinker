@@ -54,9 +54,12 @@
 :- autoload(library(utf8), [utf8_codes/3]).
 :- autoload(library(dcg/basics), [string/3, number/3, remainder//1]).
 :- autoload(library(http/html_write), [html/3, print_html/1]).
+:- autoload(library(http/term_html), [term//2]).
 :- autoload(library(ansi_term), [ansi_format/3]).
 :- autoload(library(lists), [append/3]).
 :- autoload(library(pprint), [print_term/2]).
+
+:- create_prolog_flag(html_term, true, [keep(true)]).
 
 :- meta_predicate
     html(:),
@@ -443,6 +446,33 @@ html(Term) :-
     tinker_query(Q),
     _ := Q.answer.appendChild(Div).
 
+
+:- multifile
+    prolog:message_line_element/3.
+
+prolog:message_line_element(S, '~W'-[T,Options]) :-
+    current_prolog_flag(html_term, true),
+    stream_property(S, tty(true)),
+    flush_output(S),
+    memberchk(html(true), Options),
+    html(\term(T, Options)).
+
+modify_write_options(true,  Opts, Opts1) =>
+    Opts1 = [html(true)|Opts].
+modify_write_options(false, Opts, Opts1) =>
+    delete(Opts, html(_), Opts1).
+
+modify_write_options(Enable, Flag) =>
+    current_prolog_flag(Flag, Opts0),
+    modify_write_options(Enable, Opts0, Opts),
+    set_prolog_flag(Flag, Opts).
+
+enable_html_console(Bool) :-
+    modify_write_options(Bool, answer_write_options),
+    modify_write_options(Bool, debugger_write_options),
+    set_prolog_flag(html_term, Bool).
+
+:- enable_html_console(true).
 
                 /*******************************
                 *           MESSAGES           *
