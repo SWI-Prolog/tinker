@@ -101,7 +101,6 @@
 <script type="module">
   import * as tinker from "./tinker.js";
   import * as term from "./term.js";
-  window.tinker = tinker;
 
   let Prolog;
   let Module;
@@ -122,11 +121,13 @@
 
   SWIPL(options).then(async (module) => {
     Module = module;
-    window.prolog = Prolog = Module.prolog;
+    Prolog = Module.prolog;
     Tinker = new tinker.Tinker({ root:document.querySelector("div.content"),
 				 module:module,
 				 banner:true
 			       });
+    window.prolog = Prolog;
+    window.tinker = Tinker;
     Term = new term.Term(Tinker.console.elem);
   });
 
