@@ -1371,7 +1371,7 @@ export class Query {
     const rc = Prolog.call(jgoal, { async:true, debugger:true });
     this.state = "run";
     const prev = this.previous();
-    if ( prev && prev.hasState("completed") )
+    if ( prev && prev.hasState("complete") )
       prev.collapsed(true);
     this.next(rc);
   }
