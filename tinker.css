@@ -111,6 +111,12 @@ div.tinker-source {
     width: 100%;
 }
 
+button.tinker-query-run > span {
+    position: relative;
+    color: blue;
+    top: -1px;
+}
+
 
 .tinker-more, .tinker-trace { margin-left: 3ex; }
 
@@ -125,7 +131,7 @@ div.tinker-source {
 .tinker-query.run:not(.key) .tinker-abort    { display: block }
 .tinker-query.key           .tinker-keyboard { display: block }
 
-.tinker-input input { flex-grow: 1; margin: 0px 10px;}
+.tinker-input input { flex-grow: 1; margin-left: 10px;}
 
 .tinker-keyboard:focus { outline: 0px; }
 .tinker-keyboard > span { color: #888; font-style: italic; font-size: 90%; }

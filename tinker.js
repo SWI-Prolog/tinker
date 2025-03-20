@@ -1106,6 +1106,7 @@ export class Query {
     const icon  = el("span.query-collapse");
     edit.title  = "Copy query to input";
     icon.title  = "Collapse/expand answer";
+    close.title = "Close query";
     const btns  = el("span.query-buttons",
 		     edit, icon, close);
     hdr.appendChild(btns);
@@ -1658,14 +1659,17 @@ export class Input {
    */
   constructor() {
     const input = el("input");
+    const run = el("button.tinker-query-run",
+		   el("span", "▶"));
     this.elem = el("div.tinker-input",
 		   el("span.prompt", "?- "),
-		   input);
+		   input, run);
     this.elem.data = { instance: this };
     input.type = "text";
     input.name = "tinker-input";
     input.autocapitalize = "none";
     input.autocomplete = "off"
+    run.title = "Run query";
     this.armInput();
     this.armCompletion();
   }
@@ -1793,6 +1797,11 @@ export class Input {
 
       event.preventDefault();
     }, true);
+
+    const run = this.elem.querySelector("button");
+    run.addEventListener("click", (ev) => {
+      this.submit(ev);
+    });
   }
 
   /**
