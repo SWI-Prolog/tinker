@@ -1156,8 +1156,9 @@ export class Query {
   #createMore() {
     const self = this;
     const next = el("button.more-next", "Next");
-    const stop = el("button.more-cont", "Stop");
-    const elem = el("div.tinker-more", next, stop);
+    const stop = el("button", "Stop");
+    const help = el("button", "?");
+    const elem = el("div.tinker-more", next, stop, help);
 
     next.addEventListener("click", (ev) => {
       ev.preventDefault();
@@ -1166,6 +1167,19 @@ export class Query {
     stop.addEventListener("click", (ev) => {
       ev.preventDefault();
       self.replyMore("continue");
+    });
+    help.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      self.replyMore("help");
+    });
+    elem.addEventListener("keyup", (ev) => {
+      if ( ev.defaultPrevented ) return;
+      const action = more_shortcuts[ev.key];
+      if ( action )
+      { ev.preventDefault();
+	ev.stopPropagation();
+	self.replyMore(action);
+      }
     });
 
     return elem;
@@ -1280,8 +1294,8 @@ export class Query {
   }
 
   close() {			// TODO: What if not completed?
-    const con = this.console;
-    if ( con.currentQuery() != this )
+    console.log(this, this.elem);
+    if ( this.hasState("complete") )
       this.elem.remove();
     else
       alert("Cannot close open query");
@@ -1480,15 +1494,29 @@ export class Query {
    */
   replyMore(action) {
     if ( this.waitfor && this.waitfor.yield == "more" ) {
+      const res = Prolog.query(
+	"'$toplevel':more_command(Action, _Keys, Msg, Style)",
+	{Action:action}, {nodebug:true, string:"atom"}).once();
+
+      switch(res.Style)
+      { case "bold":
+	  this.print(res.Msg, "stdout", {bold:true});
+	  break;
+	case "comment":
+	  this.print(res.Msg, "stdout", {color:"#0f0"});
+	  break;
+	case "warning":
+	  this.print(res.Msg, "stdout", {color:"#800"});
+	  break;
+      }
+
       switch(action)
       { case "redo":
-	{ this.print(";", "stdout");
-	  this.nextAnswer();
+	{ this.nextAnswer();
 	  break;
 	}
 	case "continue":
-	{ this.print(".", "stdout");
-	  this.answer_ignore_nl = true;
+	{ this.answer_ignore_nl = true;
 	  break;
 	}
       }
@@ -1835,6 +1863,23 @@ export const trace_shortcuts = {
   "n":     "nodebug",
   "u":	   "up",
   "?":	   "help"
+};
+
+export const more_shortcuts = {
+  "h": "help",
+  "?": "help",
+  ";": "redo",
+  " ": "redo",
+  "n": "redo",
+  "r": "redo",
+  ".": "continue",
+  "a": "continue",
+  "c": "continue",
+  "*": "choicepoint",
+  "w": "write",
+  "p": "print",
+  "+": "depth_inc",
+  "-": "depth_dec"
 };
 
 
