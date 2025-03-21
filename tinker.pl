@@ -132,9 +132,19 @@ load_file(Spec, String) :-
     !,
     fetch(Spec, text, String).
 load_file(Spec, String) :-
+    exists_file(Spec),
+    !,
     setup_call_cleanup(
         open(Spec, read, In),
         read_string(In, _Len, String),
+        close(In)).
+load_file(Spec, String) :-
+    sub_atom(Spec, 0, _, _, '/swipl/'),
+    atom_concat('/wasm', Spec, URL),
+    fetch(URL, text, String),
+    setup_call_cleanup(
+        open(Spec, write, In),
+        format(In, '~s', [String]),
         close(In)).
 
 %!  tty_link(+Link) is det.
