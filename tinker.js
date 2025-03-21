@@ -192,7 +192,7 @@ export class Source {
       select.appendChild(sep);
 
       json.forEach((ex) => {
-	if ( !this.hasFileOption(select, this.userFile(ex.name)) ) {
+	if ( !this.hasFileOption(this.userFile(ex.name)) ) {
 	  const opt = document.createElement("option");
 	  opt.className = "url";
 	  opt.value = "/wasm/examples/"+ex.name;
