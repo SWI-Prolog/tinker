@@ -562,6 +562,9 @@ export class Editor {
     this.cm.on("change", (cm, change) => {
       this.change(change);
     });
+    this.cm.on("viewportChange", (cm, from, to) => {
+      this.viewport(from, to);
+    });
   }
 
   /**
@@ -599,6 +602,10 @@ export class Editor {
 	this.refreshHighlight("timed");
       }, 2000);
     }
+  }
+
+  viewport(from, to) {
+    console.log("Showing lines", from, to);
   }
 
   async refreshHighlight(why) {
