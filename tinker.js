@@ -1202,7 +1202,7 @@ export class Query {
   #createTrace() {
     const self = this;
     function button(action, title, label) {
-      const btn = el(`button.${action}`, label);
+      const btn = el(`button.${action}`, el("span", label));
       btn.title = title;
       btn.addEventListener("click", () => {
 	self.replyTrace(action);
@@ -1214,7 +1214,7 @@ export class Query {
 		     button("creep",   "Creep (c,Space,Enter)", "↴"),
 		     button("skip",    "Skip (s)",              "↷"),
 		     button("retry",   "Retry (r)",             "↻"),
-		     button("nodebug", "Nodebug (n)",           "▶"),
+		     button("nodebug", "Nodebug (n)",           "▷"),
 		     button("abort",   "Abort (a)",             "🛑"),
 		     button("help",    "Help (?)",              "?"));
 

@@ -111,12 +111,15 @@ div.tinker-source {
     width: 100%;
 }
 
+div.tinker-trace > button.nodebug > span,
 button.tinker-query-run > span {
     position: relative;
-    color: blue;
     top: -1px;
 }
 
+button.tinker-query-run {
+    color: blue;
+}
 
 .tinker-more, .tinker-trace { margin-left: 3ex; }
 
