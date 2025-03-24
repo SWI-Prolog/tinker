@@ -102,7 +102,10 @@ tinker_run(TinkerQuery, Query) :-
 tinker_query(TinkerQuery) :-
     nb_current(tinker_query, TinkerQuery).
 
-:- multifile prolog_edit:edit_source/1.
+:- multifile
+    prolog_edit:edit_source/1,
+    prolog_edit:exists_location/1,
+    prolog_edit:user_select/2.
 
 %!  prolog_edit:edit_source(++Spec)
 %
@@ -113,19 +116,23 @@ prolog_edit:edit_source(Spec) :-
     edit_source(Spec).
 
 edit_source(Spec) :-
-    memberchk(file(File), Spec),
+    #{file:File} :< Spec,
     load_file(File, String),
     _ := tinker.source.addFileOption(#File),
     _ := tinker.source.switchToFile(#File),
     tinker.source.value := String,
-    (   memberchk(line(Line), Spec)
-    ->  (   memberchk(linepos(LinePos), Spec)
+    (   #{line:Line} :< Spec
+    ->  (   #{linepos:LinePos} :< Spec
         ->  Options = _{linepos:LinePos}
         ;   Options = _{}
         ),
         _ := tinker.source.goto(Line, Options)
     ;   true
     ).
+
+prolog_edit:exists_location(Spec) :-
+    #{file:File} :< Spec,
+    sub_atom(File, 0, _, _, '/swipl/').
 
 load_file(Spec, String) :-
     uri_is_global(Spec),
@@ -146,6 +153,11 @@ load_file(Spec, String) :-
         open(Spec, write, In),
         format(In, '~s', [String]),
         close(In)).
+
+% As the location is a hyperlink, there is no need to ask for
+% keyboard interaction.
+prolog_edit:user_select(_Max, _I) :-
+    !.
 
 %!  tty_link(+Link) is det.
 %
