@@ -516,6 +516,7 @@ export class Editor {
   static cm_url = "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.9";
   static cm_swi = "https://www.swi-prolog.org/download/codemirror";
   CodeMirror;
+  timeout;
 
   /**
    * @param {HTMLDivElement} container Element in which to create the editor
@@ -558,6 +559,9 @@ export class Editor {
 				theme: "prolog",
 				prologKeys: true
 			      });
+    this.cm.on("change", (cm, change) => {
+      this.change(change);
+    });
   }
 
   /**
@@ -569,6 +573,37 @@ export class Editor {
   }
   set value(content) {
     this.cm.setValue(content);
+  }
+
+  /**
+   * Called  on  changes  to  the  editor.   This  is  used  to  drive
+   * highlighting updates.  To sync with PceEmacs, the scheme is to
+   *   - Do a full xref and highlight pass on changing the value
+   *     and after 2 seconds idle time.
+   *   - Do an incremental update for the current clause on each
+   *     change.  This gets the clause around the caret.
+   */
+  change(change) {
+    const gen = this.cm.changeGeneration();
+
+    if ( this.timeout ) {
+      clearTimeout(this.timeout);
+      this.timeout = null;
+    }
+
+    if ( change.origin == "setValue" ) {
+      console.log("New value");
+      this.refreshHighlight("init");
+    } else {
+      this.timeout = setTimeout(() => {
+	this.refreshHighlight("timed");
+      }, 2000);
+    }
+  }
+
+  async refreshHighlight(why) {
+    console.log("Refresh", why);
+    await Prolog.forEach("highlight:refresh", {}, {engine:true});
   }
 
   /**
@@ -632,9 +667,12 @@ export class Editor {
     if ( !cm._markers )
       cm._markers = [];
 
+    if ( options.attributes ) {
+      delete options.attributes["$tag"];
+    }
+
     const f = toPos(from);
     const t = toPos(to);
-    console.log(from, f, to, t);
     const m = cm.markText(f, t, options);
     m._from = from;
     m._to   = to;
@@ -2208,7 +2246,9 @@ export class Tinker {
 		     {Dir:this.source.user_dir}).once();
 	if ( options.banner )
 	  Prolog.call("version");
-	this.console.addQuery();
+	Prolog.consult("highlight.pl").then(() => {
+	  this.console.addQuery();
+	});
       });
     } else {
       if ( options.banner )
