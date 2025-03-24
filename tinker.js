@@ -1211,11 +1211,12 @@ export class Query {
     }
 
     const trace = el("div.tinker-trace",
-		     button("creep",   "Creep (c,Space,Enter)", "↳"),
-		     button("skip",    "Skip (s)",              "⏭"),
+		     button("creep",   "Creep (c,Space,Enter)", "↴"),
+		     button("skip",    "Skip (s)",              "↷"),
 		     button("retry",   "Retry (r)",             "↻"),
 		     button("nodebug", "Nodebug (n)",           "▶"),
-		     button("abort",   "Abort (a)",             "⏹"));
+		     button("abort",   "Abort (a)",             "🛑"),
+		     button("help",    "Help (?)",              "?"));
 
     trace.addEventListener("keyup", (ev) => {
       if ( ev.defaultPrevented ) return;
@@ -1620,6 +1621,20 @@ export class Query {
     if ( con )
       return con.tty_size();
   }
+
+  /**
+   * Get  access to  the shortcut  mapping.  This  both allows  giving
+   * correct help and modifying the shortcuts from Prolog.
+   * @return {object} Mapping from Event `key` to an action.
+   */
+  shortcuts(which) {
+    switch(which)
+    { case "trace":
+        return trace_shortcuts;
+      case "more":
+      return more_shortcuts;
+    }
+  }
 } // end class Query
 
 
@@ -1854,12 +1869,12 @@ export class Input {
 		 *******************************/
 
 /**
- * Mapping from keys  to Prolog trace events.  This  is exported, such
- * that Prolog can use this to print the trace help commands.
+ * Mapping from  keys to  Prolog trace events.   Can be  accessed from
+ * {@link Query#shortcuts}.
  * @type {object}
  */
 
-export const trace_shortcuts = {
+const trace_shortcuts = {
   " ":     "creep",
   "Enter": "creep",
   "a":	   "abort",
@@ -1874,7 +1889,7 @@ export const trace_shortcuts = {
   "?":	   "help"
 };
 
-export const more_shortcuts = {
+const more_shortcuts = {
   "h": "help",
   "?": "help",
   ";": "redo",
