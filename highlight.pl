@@ -1,5 +1,6 @@
 :- module(highlight,
-          [ highlight/0
+          [ highlight/0,
+            clear_highlight/0
           ]).
 :- use_module(library(wasm)).
 :- use_module(library(prolog_colour)).
@@ -23,3 +24,5 @@ mark(Start, Len, CSSClass) :-
 
 class_css(goal(built_in,_), "cm-goal_built_in").
 
+clear_highlight :-
+    _ := tinker.source.clearMarks().

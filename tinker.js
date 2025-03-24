@@ -174,7 +174,7 @@ export class Source {
   get value()           { return this.editor.value; }
   goto(line,options)    { this.editor.goto(line,options); }
   mark(from,to,options) { this.editor.mark(from,to,options); }
-
+  clearMarks(from,to)   { this.editor.clearMarks(from,to); }
 
   /**
    * Add the examples to the file selector.  This is not ideal as
@@ -609,7 +609,7 @@ export class Editor {
   }
 
   mark(from, to, options) {
-    const cm = this.cm
+    const cm = this.cm;
     let line = cm.firstLine();
     let last = cm.lastLine();
     let ls = 0;
@@ -629,7 +629,35 @@ export class Editor {
 	return x;
     }
 
-    cm.markText(toPos(from), toPos(to), options);
+    if ( !cm._markers )
+      cm._markers = [];
+
+    const m = cm.markText(toPos(from), toPos(to), options);
+    m._from = from;
+    m._to   = to;
+    cm._markers.push(m);
+  }
+
+  clearMarks(from, to) {
+    const cm = this.cm;
+
+    if ( cm._markers ) {
+      if ( from === undefined ) from = 0;
+      if ( to   === undefined ) to   = 100000000;
+
+      let del = 0;
+      for(let i=0; i<cm._markers.length; i++) {
+	const m = cm._markers[i];
+	if ( (m._from >= from && m._from <= to) ||
+	     (m._to   >= from && m._to   <= to) ) {
+	  del++;
+	  m.clear();
+	  cm._markers[i] = undefined;
+	}
+      }
+      if ( del )
+	cm._markers = cm._markers.filter((el) => el !== undefined);
+    }
   }
 } // End class Editor
 
