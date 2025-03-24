@@ -616,15 +616,15 @@ export class Editor {
 
     function toPos(x) {
       if ( typeof(x) === "number" ) {
-	for( ; line < last ; line++ ) {
+	for( ; line <= last ; line++ ) {
 	  const info = cm.lineInfo(line);
 	  const len  = info.text.length;
-	  if ( x < ls+len ) {
+	  if ( x <= ls+len ) {
 	    return {line:line, ch:x-ls};
 	  }
-	  ls += len;
+	  ls += len+1;
 	}
-	return {line:line, ch:0};
+	return {line:last, ch:0};
       } else
 	return x;
     }
@@ -632,7 +632,10 @@ export class Editor {
     if ( !cm._markers )
       cm._markers = [];
 
-    const m = cm.markText(toPos(from), toPos(to), options);
+    const f = toPos(from);
+    const t = toPos(to);
+    console.log(from, f, to, t);
+    const m = cm.markText(f, t, options);
     m._from = from;
     m._to   = to;
     cm._markers.push(m);

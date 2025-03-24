@@ -22,7 +22,9 @@ mark(Start, Len, CSSClass) :-
     End is Start+Len,
     _ := tinker.source.mark(Start, End, #{className:CSSClass}).
 
-class_css(goal(built_in,_), "cm-goal_built_in").
+class_css(goal(built_in,_),     "cm-goal_built_in").
+class_css(goal(global(_,_),_),  "cm-goal_global").
+class_css(head(unreferenced,_), "cm-head_unreferenced").
 
 clear_highlight :-
     _ := tinker.source.clearMarks().
