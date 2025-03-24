@@ -170,9 +170,10 @@ export class Source {
     this.addExamples();
   }
 
-  set value(source)   { this.editor.value = source; }
-  get value()         { return this.editor.value; }
-  goto(line, options) { this.editor.goto(line, options); }
+  set value(source)     { this.editor.value = source; }
+  get value()           { return this.editor.value; }
+  goto(line,options)    { this.editor.goto(line,options); }
+  mark(from,to,options) { this.editor.mark(from,to,options); }
 
 
   /**
@@ -598,13 +599,18 @@ export class Editor {
     this.cm.setCursor({line:line,ch:ch});
     this.cm._searchMarkers.push(
       this.cm.markText({line:line, ch:0},
-		  {line:line, ch:this.cm.getLine(line).length},
-		  { className:"CodeMirror-search-match",
-		    clearOnEnter: true,
-		    clearWhenEmpty: true,
-		    title: "Target line"
-		  }));
+		       {line:line, ch:this.cm.getLine(line).length},
+		       { className:"CodeMirror-search-match",
+			 clearOnEnter: true,
+			 clearWhenEmpty: true,
+			 title: "Target line"
+		       }));
     this.cm.on("cursorActivity", clearSearchMarkers);
+  }
+
+  mark(from, to, options) {
+    console.log(from, to, options);
+    this.cm.markText(from, to, options);
   }
 } // End class Editor
 
