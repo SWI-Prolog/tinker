@@ -609,8 +609,27 @@ export class Editor {
   }
 
   mark(from, to, options) {
-    console.log(from, to, options);
-    this.cm.markText(from, to, options);
+    const cm = this.cm
+    let line = cm.firstLine();
+    let last = cm.lastLine();
+    let ls = 0;
+
+    function toPos(x) {
+      if ( typeof(x) === "number" ) {
+	for( ; line < last ; line++ ) {
+	  const info = cm.lineInfo(line);
+	  const len  = info.text.length;
+	  if ( x < ls+len ) {
+	    return {line:line, ch:x-ls};
+	  }
+	  ls += len;
+	}
+	return {line:line, ch:0};
+      } else
+	return x;
+    }
+
+    cm.markText(toPos(from), toPos(to), options);
   }
 } // End class Editor
 
