@@ -24,7 +24,10 @@ mark(Start, Len, CSSClass) :-
 
 class_css(goal(built_in,_),     "cm-goal_built_in").
 class_css(goal(global(_,_),_),  "cm-goal_global").
+class_css(goal(recursion,_),    "cm-goal_recursion").
+class_css(goal(undefined,_),    "cm-goal_undefined").
 class_css(head(unreferenced,_), "cm-head_unreferenced").
+class_css(nofile,               "cm-nofile").
 
 clear_highlight :-
     _ := tinker.source.clearMarks().
