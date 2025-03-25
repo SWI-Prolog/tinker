@@ -838,6 +838,18 @@ export class Editor {
     return {line:last, ch:0};
   }
 
+  /**
+   * Add a CodeMirror text mark for the range (from,to).
+   * @param {number|object} from Start location as 0-based offset or CodeMirror
+   * {line:Line, ch:LinePos} object.
+   * @param {number|object} to End location as 0-based offset or CodeMirror
+   * {line:Line, ch:LinePos} object.
+   * @param {object} options Options passed to {@link
+   * CodeMirror#markText}.  Typically contains `className`.  May also
+   * contain `attributes for additional attributed on the `<span>` that
+   * is created.  This often involves `title`.
+   */
+
   mark(from, to, options) {
     const cm = this.cm;
 
