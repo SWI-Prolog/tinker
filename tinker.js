@@ -178,6 +178,16 @@ export class Source {
   clearMarks(from,to)   { this.editor.clearMarks(from,to); }
 
   /**
+   * The default  translation to Prolog  gets the content as  an atom.
+   * We return an instance of Prolog.String.
+   * @return {Prolog.String} representing the current content of the
+   * editor.
+   */
+  getValueAsPrologString() {
+    return new Prolog.String(this.value);
+  }
+
+  /**
    * Add the examples to the file selector.  This is not ideal as
    * the standard HTML `<select>` does not allow for styling.
    */

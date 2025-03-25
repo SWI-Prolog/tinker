@@ -42,7 +42,7 @@ highlight_all :-
     highlight_all(Source).
 
 highlight_all(Source) :-
-    Text := Source.value,
+    Text := Source.getValueAsPrologString(),
     File := Source.files.current,
     format(atom(SourceId), 'edit:~w', [File]),
     xref_editor(SourceId, Text),
