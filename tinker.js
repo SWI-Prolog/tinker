@@ -545,7 +545,9 @@ export class Editor {
 	    ], (cm) => {
 	      this.CodeMirror = cm;
 	      this.createCM(container);
-	      cont.call(this.cm);
+	      Prolog.consult("highlight.pl").then(() => {
+		cont.call(this.cm);
+	      });
 	    });
 
     loadCSS(cm_swi("/theme/prolog.css"));
@@ -2253,9 +2255,7 @@ export class Tinker {
 		     {Dir:this.source.user_dir}).once();
 	if ( options.banner )
 	  Prolog.call("version");
-	Prolog.consult("highlight.pl").then(() => {
-	  this.console.addQuery();
-	});
+	this.console.addQuery();
       });
     } else {
       if ( options.banner )
