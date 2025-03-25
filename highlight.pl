@@ -45,10 +45,11 @@ highlight_all(Source) :-
     Text := Source.getValueAsPrologString(),
     File := Source.files.current,
     format(atom(SourceId), 'edit:~w', [File]),
-    xref_editor(SourceId, Text),
     setup_call_cleanup(
         open_string(Text, In),
-        prolog_colourise_stream(In, SourceId, colour_item(Source)),
+        ( xref_editor(SourceId, In),
+          prolog_colourise_stream(In, SourceId, colour_item(Source))
+        ),
         close(In)).
 
 colour_item(Source, Class, Start, Len) :-
@@ -89,14 +90,14 @@ clear_highlight :-
 :- multifile
     prolog:xref_source_identifier/2.
 
-xref_editor(SourceId, Source) :-
-    setup_call_cleanup(
-        open_string(Source, In),
+xref_editor(SourceId, Stream) :-
+    stream_property(Stream, position(Pos)),
+    call_cleanup(
         xref_source(SourceId,
                     [ silent(true),
-                      stream(In)
+                      stream(Stream)
                     ]),
-        close(In)).
+        set_stream_position(Stream, Pos)).
 
 prolog:xref_source_identifier(Id, Id) :-
     sub_atom(Id, 0, _, _, 'edit:').
