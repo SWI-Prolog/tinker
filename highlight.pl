@@ -1,40 +1,59 @@
 :- module(highlight,
-          [ highlight/0,
+          [ highlight_all/0,
             clear_highlight/0
           ]).
 :- use_module(library(wasm)).
 :- use_module(library(prolog_colour)).
 :- use_module(library(prolog_xref)).
 
-refresh :-
+:- public
+    refresh_all/0,
+    refresh_clause/2.
+
+refresh_all :-
     clear_highlight,
-    highlight.
+    highlight_all.
 
-refresh_clause(Info) :-
-    pp(Info).
-
-highlight :-
-    Source := tinker.source.value,
-    File := tinker.source.files.current,
+refresh_clause(Source, Info) :-
+    _{file:File, text:Text, start_char:Offset} :< Info,
     format(atom(SourceId), 'edit:~w', [File]),
-    xref_editor(SourceId, Source),
     setup_call_cleanup(
-        open_string(Source, In),
-        prolog_colourise_stream(In, SourceId, colour_item),
+        open_string(Text, In),
+        prolog_colourise_term(In, SourceId, colour_item(Offset, Source), []),
         close(In)).
 
-colour_item(Class, Start, Len) :-
+colour_item(Offset, Source, Class, Start, Len) :-
+    TheStart is Start+Offset,
+    colour_item(Source, Class, TheStart, Len).
+
+%!  highlight_all
+
+highlight_all :-
+    Source := tinker.source,
+    highlight_all(Source).
+
+highlight_all(Source) :-
+    Text := Source.value,
+    File := Source.files.current,
+    format(atom(SourceId), 'edit:~w', [File]),
+    xref_editor(SourceId, Text),
+    setup_call_cleanup(
+        open_string(Text, In),
+        prolog_colourise_stream(In, SourceId, colour_item(Source)),
+        close(In)).
+
+colour_item(Source, Class, Start, Len) :-
     (   class_css(Class, CSSClass, Attrs)
-    ->  mark(Start, Len, CSSClass, Attrs)
+    ->  mark(Source, Start, Len, CSSClass, Attrs)
     ;   true
     ).
 
-mark(Start, Len, CSSClass, -) =>
+mark(Source, Start, Len, CSSClass, -) =>
     End is Start+Len,
-    _ := tinker.source.mark(Start, End, #{className:CSSClass}).
-mark(Start, Len, CSSClass, Attrs) =>
+    _ := Source.mark(Start, End, #{className:CSSClass}).
+mark(Source, Start, Len, CSSClass, Attrs) =>
     End is Start+Len,
-    _ := tinker.source.mark(Start, End, #{className:CSSClass, attributes:Attrs}).
+    _ := Source.mark(Start, End, #{className:CSSClass, attributes:Attrs}).
 
 class_css(goal(built_in,_),     "cm-goal_built_in", -).
 class_css(goal(global(_,_),_),  "cm-goal_global", -).

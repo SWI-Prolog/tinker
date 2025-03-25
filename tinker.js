@@ -154,7 +154,8 @@ export class Source {
     Module.FS.mkdir(this.user_dir);
 
     this.editor = new Editor(this.byname("editor"),
-				   () => self.afterEditor());
+			     () => self.afterEditor(),
+			     { source:this });
     // Register event handling
     this.armFileSelect();
     this.armNewFileButton();
@@ -244,6 +245,7 @@ export class Source {
     if ( this.files.current != name ) {
       this.ensureSavedCurrentFile();
       this.files.current = name;
+      this.editor.file = name;
       if ( !this.files.list.includes(name) )
 	this.files.list.push(name);
       this.persist.loadFile(name);
@@ -515,15 +517,20 @@ export class Source {
 export class Editor {
   static cm_url = "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.9";
   static cm_swi = "https://www.swi-prolog.org/download/codemirror";
-  CodeMirror;
-  timeout;
+  CodeMirror;			// Our CodeMirror instance
+  timeout;			// Timeout to detect typing pause (highlight)
+  source;			// Related Source instance
+  file;				// Current file
 
   /**
    * @param {HTMLDivElement} container Element in which to create the editor
    * @param {function} cont Call-back called when the editor is completed.
+   * @param {object} options
+   * @param {object} options.source {@link Source} instance embedding me.
    */
-  constructor(container, cont) {
+  constructor(container, cont, options) {
     const instance = this;
+    this.source = options.source;
 
     function cm_url(sub) {
       return Editor.cm_url + sub;
@@ -607,8 +614,12 @@ export class Editor {
     }
   }
 
+  /**
+   * Trap changes  to the viewport.   Currently unused.  This  must be
+   * used to avoid highlighting large files as a whole.
+   */
   viewport(from, to) {
-    console.log("Showing lines", from, to);
+    //console.log("Showing lines", from, to);
   }
 
   /**
@@ -616,16 +627,26 @@ export class Editor {
    * the last cross-reference data.
    */
   async refreshTermHighlight(clause) {
-    console.log(clause);
-    await Prolog.forEach("highlight:refresh_clause(Clause)",
-			 {Clause:clause}, {engine:true});
+    const source = this.source;
+    this.clearMarks(clause.start_char,
+		    clause.start_char+clause.text.length);
+    await Prolog.forEach("highlight:refresh_clause(Source, Clause)",
+			 {Source:source, Clause:clause}, {engine:true});
   }
 
   async refreshHighlight(why) {
-    console.log("Refresh", why);
-    await Prolog.forEach("highlight:refresh", {}, {engine:true});
+    const source = this.source;
+    this.clearMarks();
+
+    await Prolog.forEach("highlight:highlight_all(Source)",
+			 {Source:source}, {engine:true});
   }
 
+  /**
+   * GetQ the  editor text  that holds the  clause around  the cursor.
+   * @return {object} An  object holding the text as  well as position
+   * information.
+   */
   getClause() {
     const cm = this.cm;
     const cursor = cm.getCursor();
@@ -653,13 +674,14 @@ export class Editor {
       sline--;
     while( eline < last && !(end=hasFullStop(eline)) )
       eline++;
-    console.log(`Clause in lines ${sline}..${eline}`);
+    //console.log(`Clause in lines ${sline}..${eline}`);
 
     let lines = [];
     for(let i = sline; i<=eline; i++)
       lines.push(cm.lineInfo(i).text);
 
     return ({ text:       lines.join("\n"),
+	      file:	  this.file,
 	      start_line: sline,
 	      end_line:   eline,
 	      end_reason: end,
@@ -667,6 +689,11 @@ export class Editor {
 	    });
   }
 
+  /**
+   * @param {number} 0-based line number
+   * @return {number} character index of the first character
+   * of the line.
+   */
   startIndexOfLine(ln) {
     const cm = this.cm;
     let index = 0;
