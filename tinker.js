@@ -571,6 +571,9 @@ export class Editor {
     this.cm.on("change", (cm, change) => {
       this.change(change);
     });
+    this.cm.on("cursorActivity", (cm) => {
+      this.cursorActivity();
+    });
     this.cm.on("viewportChange", (cm, from, to) => {
       this.viewport(from, to);
     });
@@ -615,6 +618,33 @@ export class Editor {
   }
 
   /**
+   * Trap  cursor activity  to highlight  the variable  at the  cursor
+   * position.
+   */
+  cursorActivity() {
+    const cm = this.cm;
+    const cursor = cm.getCursor();
+    let word;
+
+    function getWord(from) {
+      const a = cm.findWordAt(from);
+      const w = cm.getRange(a.anchor, a.head);
+      if ( w.match(/\w+/) )
+	return w;
+    }
+
+    if ( !(word=getWord(cursor)) &&
+	 cursor.ch > 0 ) {
+      const prev = {...cursor};
+      prev.ch--;
+      word=getWord(prev);
+    }
+
+    if ( word && /^(_|\p{Lu})/u.test(word) )
+      this.markVar(word);
+  }
+
+  /**
    * Trap changes  to the viewport.   Currently unused.  This  must be
    * used to avoid highlighting large files as a whole.
    */
@@ -632,6 +662,16 @@ export class Editor {
 			 {Source:source, Clause:clause}, {engine:true});
   }
 
+  /**
+   * Mark the variable named `varname` in the current clause.
+   */
+  markVar(varname) {
+    console.log(varname);
+  }
+
+  /**
+   * Refresh all highlighting over the entire file.
+   */
   async refreshHighlight(why) {
     const source = this.source;
     this.clearMarks();
@@ -658,10 +698,11 @@ export class Editor {
     }
 
     function hasFullStop(ln) {
-      const handle = cm.lineInfo(ln).handle;
+      const info   = cm.lineInfo(ln);
+      const handle = info.handle;
       if ( handle.styles && handle.styles.includes("fullstop") )
 	return "token";
-      if ( handle.text.match(/[^#$&*+-./:<=>?@\\^~]\.\s/) )
+      if ( /[^#$&*+-./:<=>?@\\^~]\.\s/.test(info.text) )
 	return "regex";
     }
 
