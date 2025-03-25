@@ -699,10 +699,11 @@ export class Editor {
    */
   async refreshHighlight(why) {
     const source = this.source;
-    this.clearMarks();
 
+    this.saveMarks();
     await Prolog.forEach("highlight:highlight_all(Source)",
 			 {Source:source}, {engine:true});
+    this.finalizeSavedMarks();
   }
 
   /**
@@ -850,14 +851,75 @@ export class Editor {
    * is created.  This often involves `title`.
    */
 
+  markers;
+  savedMarkers;
+
+  saveMarks() {
+    this.savedMarkers = this.markers;
+    this.markers = [];
+  }
+
+  finalizeSavedMarks() {
+    if ( this.savedMarkers ) {
+      for(let m of this.savedMarkers)
+	m.clear();
+      this.savedMarkers = null;
+    }
+  }
+
+  keepMark(from, to, options) {
+    if ( this.savedMarkers ) {
+      if ( typeof(from) !== "number" ||
+	   typeof(to)   !== "number" )
+	return false;
+
+      function equalMark(m, from, to, options) {
+	function equalAttrs(a1, a2) {
+	  if ( !a1 && !a2 )
+	    return true;
+	  for(let a of ["title"]) {
+	    if ( a1[a] || a2[a] && a1[a] != a2[a] )
+	      return false;
+	  }
+	  return true;
+	}
+
+	return ( m._from == from && m._to == to &&
+		 m.className == options.className &&
+		 equalAttrs(options.attributes, m.attributes) );
+      }
+
+      for(let i=0; i<this.savedMarkers.length; i++) {
+	const m = this.savedMarkers[0];
+	if ( equalMark(m, from, to, options) ) {
+	  this.markers.push(m);
+	  this.savedMarkers.shift();
+	  return true;
+	} else {
+	  if ( m._from < to ) {
+	    m.clear();
+	    this.savedMarkers.shift();
+	    return false;
+	  }
+	}
+      }
+    }
+
+    return false;
+  }
+
   mark(from, to, options) {
     const cm = this.cm;
 
+    if ( this.keepMark(from, to, options) )
+      return;
+
     const toPos = (x) => typeof(x) === "number" ? this.indexToPos(x) : x;
 
-    if ( !cm._markers )
-      cm._markers = [];
+    if ( !this.markers )
+      this.markers = [];
 
+    delete options["$tag"];
     if ( options.attributes ) {
       delete options.attributes["$tag"];
     }
@@ -867,28 +929,28 @@ export class Editor {
     const m = cm.markText(f, t, options);
     m._from = from;
     m._to   = to;
-    cm._markers.push(m);
+    this.markers.push(m);
   }
 
   clearMarks(from, to) {
     const cm = this.cm;
 
-    if ( cm._markers ) {
+    if ( this.markers ) {
       if ( from === undefined ) from = 0;
       if ( to   === undefined ) to   = 100000000;
 
       let del = 0;
-      for(let i=0; i<cm._markers.length; i++) {
-	const m = cm._markers[i];
+      for(let i=0; i<this.markers.length; i++) {
+	const m = this.markers[i];
 	if ( (m._from >= from && m._from <= to) ||
 	     (m._to   >= from && m._to   <= to) ) {
 	  del++;
 	  m.clear();
-	  cm._markers[i] = undefined;
+	  this.markers[i] = undefined;
 	}
       }
       if ( del )
-	cm._markers = cm._markers.filter((el) => el !== undefined);
+	this.markers = this.markers.filter((el) => el !== undefined);
     }
   }
 } // End class Editor
