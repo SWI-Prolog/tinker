@@ -552,7 +552,7 @@ export class Editor {
 	    ], (cm) => {
 	      this.CodeMirror = cm;
 	      this.createCM(container);
-	      Prolog.consult("highlight.pl").then(() => {
+	      Prolog.consult("highlight.pl", {engine:true}).then(() => {
 		cont.call(this.cm);
 	      });
 	    });
@@ -628,8 +628,6 @@ export class Editor {
    */
   async refreshTermHighlight(clause) {
     const source = this.source;
-    this.clearMarks(clause.start_char,
-		    clause.start_char+clause.text.length);
     await Prolog.forEach("highlight:refresh_clause(Source, Clause)",
 			 {Source:source, Clause:clause}, {engine:true});
   }

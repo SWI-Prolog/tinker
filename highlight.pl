@@ -22,6 +22,11 @@ refresh_clause(Source, Info) :-
         prolog_colourise_term(In, SourceId, colour_item(Offset, Source), []),
         close(In)).
 
+colour_item(Offset, Source, range, Start, Len) :-
+    !,
+    From is Start+Offset,
+    To   is From+Len,
+    _ := Source.clearMarks(From, To).
 colour_item(Offset, Source, Class, Start, Len) :-
     TheStart is Start+Offset,
     colour_item(Source, Class, TheStart, Len).
@@ -65,6 +70,8 @@ class_css(goal(undefined,_),    "cm-goal_undefined", -).
 class_css(head(unreferenced,_), "cm-head_unreferenced", -).
 class_css(head(local(_Line),_),  "cm-head", -). %#{title:"zero"}).
 class_css(nofile,               "cm-nofile", -).
+class_css(singleton,		"cm-singleton", -).
+class_css(syntax_error(Msg,_Range), "cm-syntax_error", #{title:Msg}).
 
 clear_highlight :-
     _ := tinker.source.clearMarks().

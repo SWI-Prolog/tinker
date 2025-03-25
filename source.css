@@ -66,6 +66,7 @@
 .cm-s-prolog span.cm-no_flag_name      {color: red;}
 .cm-s-prolog span.cm-error             {border-bottom: 2px dotted #f00; }
 .cm-s-prolog span.cm-instantiation_error {border-bottom: 2px dotted #f00; }
+.cm-s-prolog span.cm-syntax_error      {background-color: orange; }
 /* Only on FF :(
 .cm-s-prolog span.cm-instantiation_error {text-decoration: underline wavy red; }
 */
