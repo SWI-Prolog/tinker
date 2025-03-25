@@ -521,6 +521,7 @@ export class Editor {
   timeout;			// Timeout to detect typing pause (highlight)
   source;			// Related Source instance
   file;				// Current file
+  current_var_clause;		// Clause marked as current var
 
   /**
    * @param {HTMLDivElement} container Element in which to create the editor
@@ -608,6 +609,7 @@ export class Editor {
 
     if ( change.origin == "setValue" ) {
       console.log("New value");
+      this.current_var_clause = null;
       this.refreshHighlight("init");
     } else {
       this.refreshTermHighlight(this.getClause());
@@ -640,10 +642,9 @@ export class Editor {
       word=getWord(prev);
     }
 
+    this.unmarkVar();
     if ( word && /^(_|\p{Lu})/u.test(word) )
       this.markVar(word);
-    else
-      this.refreshTermHighlight(this.getClause());
   }
 
   /**
@@ -671,6 +672,16 @@ export class Editor {
     const clause = this.getClause();
     clause.current_variable = varname;
     this.refreshTermHighlight(clause);
+    this.current_var_clause = clause;
+  }
+
+  unmarkVar() {
+    const clause = this.current_var_clause;
+    if ( clause ) {
+      this.current_var_clause = null;
+      delete clause.current_variable;
+      this.refreshTermHighlight(clause);
+    }
   }
 
   /**
