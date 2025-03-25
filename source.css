@@ -27,19 +27,24 @@
 .cm-s-prolog span.cm-singleton	       {color: #800; font-weight: bold;}
 .cm-s-prolog span.cm-current_var       {background: #bff;
 					text-decoration: underline;}
-.cm-s-prolog span.cm-identifier	       {font-weight: bold;}
-.cm-s-prolog span.cm-keyword	       {font-weight: bold;}
-.cm-s-prolog span.cm-decl_option       {font-weight: bold;}
+.cm-s-prolog span.cm-identifier	       {font-weight: bold;
+					color: black !important;}
+.cm-s-prolog span.cm-keyword	       {font-weight: bold;;
+					color: black !important;}
+.cm-s-prolog span.cm-decl_option       {font-weight: bold;
+					color: black !important;}
 .cm-s-prolog span.cm-module	       {color: #549;}
 .cm-s-prolog span.cm-constraint        {color: #008b8b;} /*dark-cyan*/
-.cm-s-prolog span.cm-head_exported     {color: blue; font-weight: bold;}
+.cm-s-prolog span.cm-head_exported     {color: blue; font-weight: bold;
+					font-style: normal !important;}
 .cm-s-prolog span.cm-head_unreferenced {color: red; font-weight: bold;}
 .cm-s-prolog span.cm-head_built_in     {background: orange; font-weight: bold;}
 .cm-s-prolog span.cm-head_iso          {background: orange; font-weight: bold;}
 .cm-s-prolog span.cm-head_hook         {color: blue;
 					text-decoration: underline;}
 .cm-s-prolog span.cm-head_extern       {color: blue; font-weight: bold;}
-.cm-s-prolog span.cm-head_public       {color: #016300; font-weight: bold;}
+.cm-s-prolog span.cm-head_public       {color: #016300; font-weight: bold;
+					font-style: normal !important;}
 .cm-s-prolog span.cm-head_constraint   {color: #008b8b; font-weight: bold;}
 .cm-s-prolog span.cm-head	       {font-weight: bold;
 					font-style: normal !important;

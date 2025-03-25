@@ -70,14 +70,34 @@ class_css(goal(global(_,_),_),  "cm-goal_global", -).
 class_css(goal(local(Line),G),  "cm-goal_local", #{title:Title}) :-
     pi_head(PI, G),
     format(string(Title), '~q is defined at line ~d', [PI, Line]).
-class_css(goal(recursion,_),    "cm-goal_recursion", -).
+class_css(goal(recursion,_),    "cm-goal_recursion", #{title:"Recursive call"}).
 class_css(goal(undefined,_),    "cm-goal_undefined", -).
+class_css(goal(dynamic(_),_),   "cm-goal_dynamic", -).
+class_css(goal(imported(_File),_), "cm-goal_imported", -).
+class_css(head(exported, _),    "cm-head_exported", -).
+class_css(head(public(_Line),_),"cm-head_public",
+          #{title:"Public predicates may be called externally"}).
 class_css(head(unreferenced,_), "cm-head_unreferenced", -).
 class_css(head(local(_Line),_),  "cm-head", -). %#{title:"zero"}).
 class_css(nofile,               "cm-nofile", -).
+class_css(file(_Path),          "cm-file", -).
+class_css(file_no_depend(_Path),"cm-file_no_depends",
+          #{title:"Imported file resolves no dependencies"}).
 class_css(singleton,		"cm-singleton", -).
 class_css(current_variable,	"cm-current_var", -).
 class_css(syntax_error(Msg,_Range), "cm-syntax_error", #{title:Msg}).
+class_css(dict_tag,		"cm-identifier", -).
+class_css(identifier,		"cm-identifier", -).
+class_css(keyword(_Kwd),        "cm-keyword", -).
+class_css(decl_option(_Option), "cm-decl_option", -).
+class_css(dict_key,		"cm-identifier", -).
+class_css(option_name,		"cm-option_name", -).
+class_css(no_option_name,	"cm-no_option_name", -).
+class_css(flag_name(_Name),	"cm-flag_name", -).
+class_css(no_flag_name(_Name),	"cm-no_flag_name", -).
+class_css(type_error(Type),	"cm-error", #{title:Title}) :-
+    format(string(Title), 'Expected ~p', [Type]).
+class_css(op_type(_),		"cm-op_type", -).
 
 clear_highlight :-
     _ := tinker.source.clearMarks().
