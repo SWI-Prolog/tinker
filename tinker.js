@@ -600,6 +600,7 @@ export class Editor {
       console.log("New value");
       this.refreshHighlight("init");
     } else {
+      this.refreshTermHighlight(change);
       this.timeout = setTimeout(() => {
 	this.refreshHighlight("timed");
       }, 2000);
@@ -608,6 +609,18 @@ export class Editor {
 
   viewport(from, to) {
     console.log("Showing lines", from, to);
+  }
+
+  /**
+   * Refresh the highlight of the clause around the cursor using
+   * the last cross-reference data.
+   */
+  refreshTermHighlight(change) {
+    const cm = this.cm;
+    const cursor = cm.getCursor();
+    const cline = cursor.line;
+    let text = cm.lineInfo(cline);
+    console.log(text);
   }
 
   async refreshHighlight(why) {
