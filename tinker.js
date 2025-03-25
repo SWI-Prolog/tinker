@@ -794,26 +794,44 @@ export class Editor {
     this.cm.on("cursorActivity", clearSearchMarkers);
   }
 
+  indexCache;
+
+  indexToPos(index) {
+    const cm = this.cm;
+    let last = cm.lastLine();
+    let line;
+    let ls;
+
+    if ( this.indexCache &&
+	 cm.changeGeneration() == this.indexCache.gen &&
+	 index >= this.indexCache.start ) {
+      line = this.indexCache.line;
+      ls   = this.indexCache.start;
+    } else {
+      line = cm.firstLine();
+      ls = 0;
+    }
+
+    for( ; line <= last ; line++ ) {
+      const info = cm.lineInfo(line);
+      const len  = info.text.length;
+      if ( index <= ls+len ) {
+	this.indexCache = {
+	  gen:   cm.changeGeneration(),
+	  line:  line,
+	  start: ls
+	};
+	return {line:line, ch:index-ls};
+      }
+      ls += len+1;
+    }
+    return {line:last, ch:0};
+  }
+
   mark(from, to, options) {
     const cm = this.cm;
-    let line = cm.firstLine();
-    let last = cm.lastLine();
-    let ls = 0;
 
-    function toPos(x) {
-      if ( typeof(x) === "number" ) {
-	for( ; line <= last ; line++ ) {
-	  const info = cm.lineInfo(line);
-	  const len  = info.text.length;
-	  if ( x <= ls+len ) {
-	    return {line:line, ch:x-ls};
-	  }
-	  ls += len+1;
-	}
-	return {line:last, ch:0};
-      } else
-	return x;
-    }
+    const toPos = (x) => typeof(x) === "number" ? this.indexToPos(x) : x;
 
     if ( !cm._markers )
       cm._markers = [];
