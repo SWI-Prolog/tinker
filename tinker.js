@@ -600,7 +600,7 @@ export class Editor {
       console.log("New value");
       this.refreshHighlight("init");
     } else {
-      this.refreshTermHighlight(change);
+      this.refreshTermHighlight(this.getClause());
       this.timeout = setTimeout(() => {
 	this.refreshHighlight("timed");
       }, 2000);
@@ -615,17 +615,64 @@ export class Editor {
    * Refresh the highlight of the clause around the cursor using
    * the last cross-reference data.
    */
-  refreshTermHighlight(change) {
-    const cm = this.cm;
-    const cursor = cm.getCursor();
-    const cline = cursor.line;
-    let text = cm.lineInfo(cline);
-    console.log(text);
+  async refreshTermHighlight(clause) {
+    console.log(clause);
+    await Prolog.forEach("highlight:refresh_clause(Clause)",
+			 {Clause:clause}, {engine:true});
   }
 
   async refreshHighlight(why) {
     console.log("Refresh", why);
     await Prolog.forEach("highlight:refresh", {}, {engine:true});
+  }
+
+  getClause() {
+    const cm = this.cm;
+    const cursor = cm.getCursor();
+    const cline = cursor.line;
+    const first = cm.firstLine();
+    const last  = cm.lastLine();
+
+    function lineEndState(ln) {
+      const info = cm.lineInfo(ln);
+      return info.handle.stateAfter;
+    }
+
+    function hasFullStop(ln) {
+      const handle = cm.lineInfo(ln).handle;
+      if ( handle.styles && handle.styles.includes("fullstop") )
+	return "token";
+      if ( handle.text.match(/[^#$&*+-./:<=>?@\\^~]\.\s/) )
+	return "regex";
+    }
+
+    let sline = cline;
+    let eline = cline;
+    let end;
+    while( sline > first && lineEndState(sline-1).inBody )
+      sline--;
+    while( eline < last && !(end=hasFullStop(eline)) )
+      eline++;
+    console.log(`Clause in lines ${sline}..${eline}`);
+
+    let lines = [];
+    for(let i = sline; i<=eline; i++)
+      lines.push(cm.lineInfo(i).text);
+
+    return ({ text:       lines.join("\n"),
+	      start_line: sline,
+	      end_line:   eline,
+	      end_reason: end,
+	      start_char: this.startIndexOfLine(sline)
+	    });
+  }
+
+  startIndexOfLine(ln) {
+    const cm = this.cm;
+    let index = 0;
+    for(let i=cm.firstLine(); i<ln; i++)
+      index += cm.lineInfo(i).text.length+1;
+    return index;
   }
 
   /**

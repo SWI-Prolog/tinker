@@ -10,6 +10,9 @@ refresh :-
     clear_highlight,
     highlight.
 
+refresh_clause(Info) :-
+    pp(Info).
+
 highlight :-
     Source := tinker.source.value,
     File := tinker.source.files.current,
