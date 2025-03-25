@@ -16,10 +16,14 @@ refresh_all :-
 
 refresh_clause(Source, Info) :-
     _{file:File, text:Text, start_char:Offset} :< Info,
+    (   CV = Info.get(current_variable)
+    ->  Options = [current_variable(CV)]
+    ;   Options = []
+    ),
     format(atom(SourceId), 'edit:~w', [File]),
     setup_call_cleanup(
         open_string(Text, In),
-        prolog_colourise_term(In, SourceId, colour_item(Offset, Source), []),
+        prolog_colourise_term(In, SourceId, colour_item(Offset, Source), Options),
         close(In)).
 
 colour_item(Offset, Source, range, Start, Len) :-
@@ -71,6 +75,7 @@ class_css(head(unreferenced,_), "cm-head_unreferenced", -).
 class_css(head(local(_Line),_),  "cm-head", -). %#{title:"zero"}).
 class_css(nofile,               "cm-nofile", -).
 class_css(singleton,		"cm-singleton", -).
+class_css(current_variable,	"cm-current_var", -).
 class_css(syntax_error(Msg,_Range), "cm-syntax_error", #{title:Msg}).
 
 clear_highlight :-

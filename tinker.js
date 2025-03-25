@@ -642,6 +642,8 @@ export class Editor {
 
     if ( word && /^(_|\p{Lu})/u.test(word) )
       this.markVar(word);
+    else
+      this.refreshTermHighlight(this.getClause());
   }
 
   /**
@@ -666,7 +668,9 @@ export class Editor {
    * Mark the variable named `varname` in the current clause.
    */
   markVar(varname) {
-    console.log(varname);
+    const clause = this.getClause();
+    clause.current_variable = varname;
+    this.refreshTermHighlight(clause);
   }
 
   /**
@@ -719,12 +723,13 @@ export class Editor {
     for(let i = sline; i<=eline; i++)
       lines.push(cm.lineInfo(i).text);
 
-    return ({ text:       lines.join("\n"),
+    return ({ text:       new Prolog.String(lines.join("\n")),
 	      file:	  this.file,
 	      start_line: sline,
 	      end_line:   eline,
 	      end_reason: end,
-	      start_char: this.startIndexOfLine(sline)
+	      start_char: this.startIndexOfLine(sline),
+	      change_gen: cm.changeGeneration()
 	    });
   }
 
