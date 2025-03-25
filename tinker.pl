@@ -116,17 +116,24 @@ prolog_edit:edit_source(Spec) :-
     edit_source(Spec).
 
 edit_source(Spec) :-
+    Source := tinker.source,
+    edit_source(Source, Spec).
+
+edit_source(Source, Spec) :-
     #{file:File} :< Spec,
-    load_file(File, String),
-    _ := tinker.source.addFileOption(#File),
-    _ := tinker.source.switchToFile(#File),
-    tinker.source.value := String,
+    (   File := Source.files.current
+    ->  true
+    ;   load_file(File, String),
+        _ := Source.addFileOption(#File),
+        _ := Source.switchToFile(#File),
+        Source.value := String
+    ),
     (   #{line:Line} :< Spec
     ->  (   #{linepos:LinePos} :< Spec
         ->  Options = _{linepos:LinePos}
         ;   Options = _{}
         ),
-        _ := tinker.source.goto(Line, Options)
+        _ := Source.goto(Line, Options)
     ;   true
     ).
 
