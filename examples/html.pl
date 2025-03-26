@@ -4,7 +4,7 @@
 % of <div> with class `answer`.  The current answer div is accessible
 % through the function `current_answer()`.
 
-:- use_module(library(http/html_write), [html//1, op(_,_,_)]).
+:- use_module(library(http/html_write), [html//1, print_html/1, op(_,_,_)]).
 :- use_module(library(dcg/high_order), [foreach//2]).
 :- use_module(library(solution_sequences), [order_by/2]).
 
