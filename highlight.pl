@@ -106,6 +106,13 @@ class_css(qq(open),		"cm-qq_open", -).
 class_css(qq(sep),		"cm-qq_sep", -).
 class_css(qq_type,		"cm-qq_type", -).
 class_css(qq_content,		"cm-qq_content", -).
+class_css(html(_),                    "cm-html", -).
+class_css(entity(_),                  "cm-entity", -).
+class_css(html_attribute(_),          "cm-html_attribute", -).
+class_css(format_string(_),           "cm-format_string", -).
+class_css(sgml_attr_function,         "cm-sgml_attr_function", -).
+class_css(http_location_for_id(_),    "cm-http_location_for_id", -).
+class_css(http_no_location_for_id(_), "cm-http_no_location_for_id", -).
 
 clear_highlight :-
     _ := tinker.source.clearMarks().
