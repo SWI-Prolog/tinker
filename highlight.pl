@@ -78,12 +78,16 @@ class_css(head(exported, _),    "cm-head_exported", -).
 class_css(head(public(_Line),_),"cm-head_public",
           #{title:"Public predicates may be called externally"}).
 class_css(head(unreferenced,_), "cm-head_unreferenced", -).
-class_css(head(local(_Line),_),  "cm-head", -). %#{title:"zero"}).
+class_css(head(local(_Line),_),  "cm-head", -).
+class_css(function,		"cm-function", -).
+class_css(no_function,		"cm-no_function", -).
+class_css(module(_Module),	"cm-module", -).
 class_css(nofile,               "cm-nofile", -).
 class_css(file(_Path),          "cm-file", -).
 class_css(file_no_depend(_Path),"cm-file_no_depends",
           #{title:"Imported file resolves no dependencies"}).
-class_css(singleton,		"cm-singleton", -).
+class_css(singleton,		"cm-singleton",
+         #{title:"Singleton variable.  Use _ or _Name"}).
 class_css(current_variable,	"cm-current_var", -).
 class_css(syntax_error(Msg,_Range), "cm-syntax_error", #{title:Msg}).
 class_css(dict_tag,		"cm-identifier", -).
@@ -98,6 +102,10 @@ class_css(no_flag_name(_Name),	"cm-no_flag_name", -).
 class_css(type_error(Type),	"cm-error", #{title:Title}) :-
     format(string(Title), 'Expected ~p', [Type]).
 class_css(op_type(_),		"cm-op_type", -).
+class_css(qq(open),		"cm-qq_open", -).
+class_css(qq(sep),		"cm-qq_sep", -).
+class_css(qq_type,		"cm-qq_type", -).
+class_css(qq_content,		"cm-qq_content", -).
 
 clear_highlight :-
     _ := tinker.source.clearMarks().

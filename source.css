@@ -17,7 +17,8 @@
 .cm-s-prolog span.cm-qq_open,
 .cm-s-prolog span.cm-qq_sep,
 .cm-s-prolog span.cm-qq_close          {color: blue; font-weight: bold;}
-.cm-s-prolog span.cm-qq_type           {font-weight: bold;}
+.cm-s-prolog span.cm-qq_type           {font-weight: bold;
+					color: #000 !important;}
 .cm-s-prolog span.cm-comment	       {color: #060; font-style: italic; line-height: 1em;}
 .cm-s-prolog span.cm-comment_string    {color: #060; font-style: italic; line-height: 1em;}
 .cm-s-prolog span.cm-var	       {color: #800;} /* Normal variable */
@@ -53,22 +54,33 @@
 .cm-s-prolog span.cm-goal_local        {font-style: normal !important;
 					color: #000 !important;
 				       }
-.cm-s-prolog span.cm-goal_built_in     {color: blue;}
-.cm-s-prolog span.cm-goal_imported     {color: blue;}
-.cm-s-prolog span.cm-goal_global       {color: #008 !important;} /*navy blue*/
-.cm-s-prolog span.cm-goal_autoload     {color: #008;}
-.cm-s-prolog span.cm-goal_undefined    {color: red;}
-.cm-s-prolog span.cm-goal_dynamic      {color: #f0f;} /*magenta*/
+.cm-s-prolog span.cm-goal_built_in     {color: blue;
+					font-style: normal !important;}
+.cm-s-prolog span.cm-goal_imported     {color: blue;
+					font-style: normal !important;}
+.cm-s-prolog span.cm-goal_global       {color: #008 !important; /*navy blue*/
+					font-style: normal !important;}
+.cm-s-prolog span.cm-goal_autoload     {color: #008;
+					font-style: normal !important;}
+.cm-s-prolog span.cm-goal_undefined    {color: red;
+					font-style: normal !important;}
+.cm-s-prolog span.cm-goal_dynamic      {color: #f0f;
+					font-style: normal !important;} /*magenta*/
 .cm-s-prolog span.cm-goal_thread_local {color: #f0f; text-decoration: underline;}
 .cm-s-prolog span.cm-goal_constraint   {color: #008b8b;} /*dark-cyan*/
 .cm-s-prolog span.cm-goal_recursion    {text-decoration: underline;}
 .cm-s-prolog span.cm-meta	       {color: blue;}
 .cm-s-prolog span.cm-op_type	       {color: blue;}
 .cm-s-prolog span.cm-file_no_depends   {color: blue; text-decoration: underline; background: #fcd}
-.cm-s-prolog span.cm-file	       {color: blue; text-decoration: underline;}
-.cm-s-prolog span.cm-nofile	       {color: red;}
-.cm-s-prolog span.cm-function	       {color: blue;}
-.cm-s-prolog span.cm-no_function       {color: red;}
+.cm-s-prolog span.cm-file	       {color: blue;
+					text-decoration: underline;
+					font-style: normal !important;}
+.cm-s-prolog span.cm-nofile	       {color: red;
+					font-style: normal !important;}
+.cm-s-prolog span.cm-function	       {color: blue !important;
+					font-style: normal !important;}
+.cm-s-prolog span.cm-no_function       {color: red !important;;
+					font-style: normal !important}
 .cm-s-prolog span.cm-option_name       {color: #3434ba;}
 .cm-s-prolog span.cm-no_option_name    {color: red;}
 .cm-s-prolog span.cm-flag_name         {color: blue;}
