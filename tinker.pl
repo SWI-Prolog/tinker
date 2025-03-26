@@ -227,7 +227,10 @@ link_location([file(File)]) -->
 
 trace_action(print, Msg) =>
     print_message(debug, Msg),
-    show_source_location(Msg).
+    (   show_source_location(Msg)
+    ->  true
+    ;   true
+    ).
 trace_action(goals, frame(Frame,_Choice,_Port,_PC)) =>
     dbg_backtrace(Frame, 5).
 trace_action(listing, frame(Frame,_Choice,_Port,_PC)) =>
@@ -271,9 +274,21 @@ show_source_location(frame(Frame, _Choice, Port, _PC)) :-
     predicate_property(Goal, line_count(Line)),
     !,
     show_trace_source(Port, File:Line).
-show_source_location(_).
+
+%!  show_trace_source(Port, File:Line) is semidet.
+%
+%   Show the source location in the editor.  Note that we can not
+%   download files if we are in a non-async callback.
+%
+%   @tbd Can we start an async call   from here? Alternatively, we could
+%   return the information and  let   Query#traceAction  create an async
+%   goal to show the source.
 
 show_trace_source(Port, File:Line) :-
+    (   is_async
+    ->  true
+    ;   access_file(File, read)
+    ),
     port_css_class(Port, CSSClass, Title),
     tinker_query(Q),
     Source := Q.console.source,
