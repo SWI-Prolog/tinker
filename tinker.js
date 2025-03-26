@@ -1782,7 +1782,7 @@ export class Query {
           this.promptMore();
           break;
 	case "trace":
-	{ this.trace_action("print", rc.trace_event);
+	{ this.traceAction("print", rc.trace_event);
 	  this.promptTrace();
           break;
 	}
@@ -1903,7 +1903,7 @@ export class Query {
       { case "goals":
 	case "listing":
 	case "help":
-	{ this.trace_action(action, this.waitfor.trace_event);
+	{ this.traceAction(action, this.waitfor.trace_event);
 	  break;
 	}
 	default:
@@ -1920,15 +1920,15 @@ export class Query {
    * @param {number} msg is the Prolog `term_t` handle holding the
    * trace event context.
    */
-  trace_action(action, msg) {
+  traceAction(action, msg) {
     const self = this;
     if ( this.engine )
-      return this.engine.with(() => self.__trace_action(action, msg));
+      return this.engine.with(() => self.__traceAction(action, msg));
     else
-      return self.__trace_action(action, msg);
+      return self.__traceAction(action, msg);
   }
 
-  __trace_action(action, msg) {
+  __traceAction(action, msg) {
     const prolog = Prolog;
 
     return prolog.with_frame(() => {
