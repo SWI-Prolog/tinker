@@ -182,3 +182,8 @@ span.exch-files.upload-armed input.upload-file { display: inline; }
 .CodeMirror-search-match {
   background-color: yellow;
 }
+.CodeMirror-trace-call      { background-color: #8df; }
+.CodeMirror-trace-exit      { background-color: #0f0; }
+.CodeMirror-trace-fail      { background-color: #f00; }
+.CodeMirror-trace-redo      { background-color: #ff0; }
+.CodeMirror-trace-exception { background-color: #f0f; }

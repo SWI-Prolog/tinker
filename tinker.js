@@ -143,6 +143,8 @@ export class Source {
     this.persist = opts.persist||new Persist();
     this.persist.source = this;
     this.con = opts.console;
+    if ( this.con )
+      this.con.source = this;
     this.user_dir = opts.user_dir||"/prolog";
     this.default_file =
       `${this.user_dir}/${opts.default_file_name||"scratch.pl"}`
@@ -775,11 +777,20 @@ export class Editor {
    * @param {number} line
    * @param {Object} [options]
    * @param {number} [options.linepos] Go to a specific column
+   * @param {string} [options.className] CSS class.  Defaults to
+   * `CodeMirror-search-match`
+   * @param {string} [options.title] Element `title` attribute.
+   * Default to `"Target line"`
+   * @param {number} [options.margin] Vertical space visible above
+   * and below the target line.  Defaults to 100 (pixels).
    */
 
   goto(line, options) {
-    options  = options||{};
-    const ch = options.linepos||0;
+    options      = options||{};
+    const ch     = options.linepos||0;
+    const cname  = options.className||"CodeMirror-search-match";
+    const title  = options.title||"Target line";
+    const margin = options.margin == undefined ? 100 : options.margin;
 
     function clearSearchMarkers(cm)
     { if ( cm._searchMarkers !== undefined )
@@ -794,13 +805,15 @@ export class Editor {
     line = line-1;
 
     this.cm.setCursor({line:line,ch:ch});
+    if ( margin )
+      this.cm.scrollIntoView({line:line,ch:ch}, margin);
     this.cm._searchMarkers.push(
       this.cm.markText({line:line, ch:0},
 		       {line:line, ch:this.cm.getLine(line).length},
-		       { className:"CodeMirror-search-match",
+		       { className: cname,
 			 clearOnEnter: true,
 			 clearWhenEmpty: true,
-			 title: "Target line"
+			 title: title
 		       }));
     this.cm.on("cursorActivity", clearSearchMarkers);
   }
@@ -1013,6 +1026,7 @@ export class Console {
   output;			// element to write in
   history;			// Query history
   persist;			// (History) persistency
+  source;			// Source instance I'm related to
 
   /**
    * Create a Tinker console.  The console is created from an `<div>`

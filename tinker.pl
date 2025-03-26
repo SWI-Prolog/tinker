@@ -50,7 +50,8 @@
 :- autoload(library(listing), [listing/1]).
 :- autoload(library(pairs), [transpose_pairs/2, group_pairs_by_key/2]).
 :- autoload(library(prolog_stack),
-            [get_prolog_backtrace/3, print_prolog_backtrace/3]).
+            [get_prolog_backtrace/3, print_prolog_backtrace/3,
+             prolog_stack_frame_property/2]).
 :- autoload(library(utf8), [utf8_codes/3]).
 :- autoload(library(dcg/basics), [string/3, number/3, remainder//1]).
 :- autoload(library(http/html_write), [html/3, print_html/1]).
@@ -119,8 +120,8 @@ edit_source(Spec) :-
     Source := tinker.source,
     edit_source(Source, Spec).
 
-edit_source(Source, Spec) :-
-    #{file:File} :< Spec,
+edit_source(Source, Options) :-
+    #{file:File} :< Options,
     (   File := Source.files.current
     ->  true
     ;   load_file(File, String),
@@ -128,12 +129,8 @@ edit_source(Source, Spec) :-
         _ := Source.switchToFile(#File),
         Source.value := String
     ),
-    (   #{line:Line} :< Spec
-    ->  (   #{linepos:LinePos} :< Spec
-        ->  Options = _{linepos:LinePos}
-        ;   Options = _{}
-        ),
-        _ := Source.goto(Line, Options)
+    (   #{line:Line} :< Options
+    ->  _ := Source.goto(Line, Options)
     ;   true
     ).
 
@@ -229,7 +226,8 @@ link_location([file(File)]) -->
 %   by PL_get_trace_context()
 
 trace_action(print, Msg) =>
-    print_message(debug, Msg).
+    print_message(debug, Msg),
+    show_source_location(Msg).
 trace_action(goals, frame(Frame,_Choice,_Port,_PC)) =>
     dbg_backtrace(Frame, 5).
 trace_action(listing, frame(Frame,_Choice,_Port,_PC)) =>
@@ -251,6 +249,45 @@ dbg_backtrace(Frame, Depth) :-
     print_prolog_backtrace(user_error, Stack,
                            [ show_files(basename)
                            ]).
+
+
+show_source_location(frame(Frame, _Choice, Port, _PC)) :-
+    prolog_frame_attribute(Frame, pc, PC),
+    prolog_frame_attribute(Frame, parent, Parent),
+    prolog_frame_attribute(Parent, clause, Clause),
+    prolog_stack_frame_property(frame(_,clause(Clause,PC),_),
+                                location(File:Line)),
+    !,
+    show_trace_source(Port, File:Line).
+show_source_location(frame(Frame, _Choice, Port, _PC)) :-
+    prolog_frame_attribute(Frame, clause, Clause),
+    clause_property(Clause, file(File)),
+    clause_property(Clause, line_count(Line)),
+    !,
+    show_trace_source(Port, File:Line).
+show_source_location(frame(Frame, _Choice, Port, _PC)) :-
+    prolog_frame_attribute(Frame, goal, Goal),
+    predicate_property(Goal, file(File)),
+    predicate_property(Goal, line_count(Line)),
+    !,
+    show_trace_source(Port, File:Line).
+show_source_location(_).
+
+show_trace_source(Port, File:Line) :-
+    port_css_class(Port, CSSClass, Title),
+    tinker_query(Q),
+    Source := Q.console.source,
+    edit_source(Source, #{file: File,
+                          line: Line,
+                          className: CSSClass,
+                          title:Title
+                         }).
+
+port_css_class(call,           "CodeMirror-trace-call",      "Trace call port").
+port_css_class(exit,           "CodeMirror-trace-exit",      "Trace exit port").
+port_css_class(fail,           "CodeMirror-trace-fail",      "Trace fail port").
+port_css_class(redo(_PC),      "CodeMirror-trace-redo",      "Trace redo port").
+port_css_class(exception(_Ex), "CodeMirror-trace-exception", "Trace exception").
 
 
                 /*******************************
