@@ -4,8 +4,9 @@
 % of <div> with class `answer`.  The current answer div is accessible
 % through the function `current_answer()`.
 
-:- use_module(library(http/html_write)).
-:- use_module(library(dcg/high_order)).
+:- use_module(library(http/html_write), [html//1, op(_,_,_)]).
+:- use_module(library(dcg/high_order), [foreach//2]).
+:- use_module(library(solution_sequences), [order_by/2]).
 
 %!  cls
 %
@@ -27,6 +28,9 @@ cls :-
 %       ?- html(['Hello ', b(world)]).
 %
 %    Note that this predicate is also provided by Tinker itself.
+
+:- html_meta
+    html(html).
 
 html(Term) :-
     phrase(html(Term), Tokens),
