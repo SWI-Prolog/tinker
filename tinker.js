@@ -734,10 +734,15 @@ export class Editor {
 	return "regex";
     }
 
+    function bodyLine(ln) {
+      const info = lineEndState(ln);
+      return info && info.inBody;
+    }
+
     let sline = cline;
     let eline = cline;
     let end;
-    while( sline > first && lineEndState(sline-1).inBody )
+    while( sline > first && bodyLine(sline-1) )
       sline--;
     while( eline < last && !(end=hasFullStop(eline)) )
       eline++;
