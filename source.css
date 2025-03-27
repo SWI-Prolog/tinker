@@ -47,6 +47,8 @@
 .cm-s-prolog span.cm-head_public       {color: #016300; font-weight: bold;
 					font-style: normal !important;}
 .cm-s-prolog span.cm-head_constraint   {color: #008b8b; font-weight: bold;}
+.cm-s-prolog span.cm-head_multifile    {color: #008; font-weight: bold;
+					font-style: normal !important;}
 .cm-s-prolog span.cm-head	       {font-weight: bold;
 					font-style: normal !important;
 					color: #000 !important;
@@ -64,11 +66,16 @@
 					font-style: normal !important;}
 .cm-s-prolog span.cm-goal_undefined    {color: red;
 					font-style: normal !important;}
+.cm-s-prolog span.cm-goal_not_callable {background-color: orange;
+					font-style: normal !important;}
 .cm-s-prolog span.cm-goal_dynamic      {color: #f0f;
 					font-style: normal !important;} /*magenta*/
 .cm-s-prolog span.cm-goal_thread_local {color: #f0f; text-decoration: underline;}
+.cm-s-prolog span.cm-goal_foreign      {color: #00ced1;} /*dark-turquoise*/
 .cm-s-prolog span.cm-goal_constraint   {color: #008b8b;} /*dark-cyan*/
 .cm-s-prolog span.cm-goal_recursion    {text-decoration: underline;}
+.cm-s-prolog span.cm-goal_multifile    {color: #008 !important;
+					font-style: normal !important;}
 .cm-s-prolog span.cm-meta	       {color: blue;}
 .cm-s-prolog span.cm-op_type	       {color: blue;}
 .cm-s-prolog span.cm-file_no_depends   {color: blue; text-decoration: underline; background: #fcd}

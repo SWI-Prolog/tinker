@@ -74,11 +74,15 @@ class_css(goal(recursion,_),    "cm-goal_recursion", #{title:"Recursive call"}).
 class_css(goal(undefined,_),    "cm-goal_undefined", -).
 class_css(goal(dynamic(_),_),   "cm-goal_dynamic", -).
 class_css(goal(imported(_File),_), "cm-goal_imported", -).
+class_css(goal(multifile(_),_), "cm-goal_multifile", -).
+class_css(goal(foreign(_),_),   "cm-goal_foreign", -).
+class_css(goal(not_callable,_), "cm-goal_not_callable", -).
 class_css(head(exported, _),    "cm-head_exported", -).
 class_css(head(public(_Line),_),"cm-head_public",
           #{title:"Public predicates may be called externally"}).
 class_css(head(unreferenced,_), "cm-head_unreferenced", -).
-class_css(head(local(_Line),_),  "cm-head", -).
+class_css(head(local(_Line),_), "cm-head", -).
+class_css(head(multifile(_),_), "cm-head_multifile", -).
 class_css(function,		"cm-function", -).
 class_css(no_function,		"cm-no_function", -).
 class_css(module(_Module),	"cm-module", -).
