@@ -1138,7 +1138,7 @@ export class Console {
    * @return {Query|undefined}
    */
   lastQuery() {
-    const q = this.output.lastChild;
+    let q = this.output.lastChild;
     while(q) {
       if ( q.classList.contains("tinker-query") && q.data )
 	return q.data.instance;
