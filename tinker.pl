@@ -530,6 +530,14 @@ html(Term) :-
 
 
 :- multifile
+    term_html:blob_rendering//3.
+
+term_html:blob_rendering(_Type, Blob, _Options) -->
+    { format(string(String), '~q', [Blob])
+    },
+    html(span(class('pl-blob'), String)).
+
+:- multifile
     prolog:message_line_element/3.
 
 prolog:message_line_element(S, '~W'-[T,Options]) :-
