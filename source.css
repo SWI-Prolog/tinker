@@ -76,6 +76,7 @@
 .cm-s-prolog span.cm-goal_recursion    {text-decoration: underline;}
 .cm-s-prolog span.cm-goal_multifile    {color: #008 !important;
 					font-style: normal !important;}
+.cm-s-prolog span.cm-rule_condition    {background-color: #d4ffe3;}
 .cm-s-prolog span.cm-meta	       {color: blue;}
 .cm-s-prolog span.cm-op_type	       {color: blue;}
 .cm-s-prolog span.cm-file_no_depends   {color: blue; text-decoration: underline; background: #fcd}

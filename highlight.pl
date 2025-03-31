@@ -114,6 +114,7 @@ class_css(head(public(_Line),_),"cm-head_public",
 class_css(head(unreferenced,_), "cm-head_unreferenced", -).
 class_css(head(local(_Line),_), "cm-head", -).
 class_css(head(multifile(_),_), "cm-head_multifile", -).
+class_css(rule_condition,	"cm-rule_condition", -).
 class_css(function,		"cm-function", -).
 class_css(no_function,		"cm-no_function", -).
 class_css(module(_Module),	"cm-module", -).
