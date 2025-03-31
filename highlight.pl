@@ -1,18 +1,50 @@
-:- module(highlight,
-          [ highlight_all/0,
-            clear_highlight/0
-          ]).
+/*  Part of SWI-Tinker
+
+    Author:        Jan Wielemaker
+    E-mail:        jan@swi-prolog.org
+    WWW:           http://www.swi-prolog.org
+    Copyright (c)  2025, SWI-Prolog Solutions b.v.
+    All rights reserved.
+
+    Redistribution and use in source and binary forms, with or without
+    modification, are permitted provided that the following conditions
+    are met:
+
+    1. Redistributions of source code must retain the above copyright
+       notice, this list of conditions and the following disclaimer.
+
+    2. Redistributions in binary form must reproduce the above copyright
+       notice, this list of conditions and the following disclaimer in
+       the documentation and/or other materials provided with the
+       distribution.
+
+    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+    "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+    LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+    FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+    COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+    INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+    BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+    LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+    CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+    LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+    ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+    POSSIBILITY OF SUCH DAMAGE.
+*/
+
+:- module(highlight, []).
 :- use_module(library(wasm)).
 :- use_module(library(prolog_colour)).
 :- use_module(library(prolog_xref)).
 
 :- public
-    refresh_all/0,
-    refresh_clause/2.
+    refresh_clause/2,
+    highlight_all/1.
 
-refresh_all :-
-    clear_highlight,
-    highlight_all.
+%!  refresh_clause(+Source, +Info) is det.
+%
+%   Refresh the highlighting of the current   clauses. This is called by
+%   the Tinker class Editor on cursor movement and changes.
 
 refresh_clause(Source, Info) :-
     _{file:File, text:Text, start_char:Offset} :< Info,
@@ -35,11 +67,10 @@ colour_item(Offset, Source, Class, Start, Len) :-
     TheStart is Start+Offset,
     colour_item(Source, Class, TheStart, Len).
 
-%!  highlight_all
-
-highlight_all :-
-    Source := tinker.source,
-    highlight_all(Source).
+%!  highlight_all(+Source) is det.
+%
+%   Highlight the entire buffer for Source. This  is called on loading a
+%   new text into the editor and after a period (2 sec) of inactivity.
 
 highlight_all(Source) :-
     Text := Source.getValueAsPrologString(),
@@ -117,9 +148,6 @@ class_css(format_string(_),           "cm-format_string", -).
 class_css(sgml_attr_function,         "cm-sgml_attr_function", -).
 class_css(http_location_for_id(_),    "cm-http_location_for_id", -).
 class_css(http_no_location_for_id(_), "cm-http_no_location_for_id", -).
-
-clear_highlight :-
-    _ := tinker.source.clearMarks().
 
 
                 /*******************************
