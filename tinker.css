@@ -182,8 +182,8 @@ span.exch-files.upload-armed input.upload-file { display: inline; }
 .CodeMirror-search-match {
   background-color: yellow;
 }
-.CodeMirror-trace-call      { background-color: #8df; }
-.CodeMirror-trace-exit      { background-color: #0f0; }
-.CodeMirror-trace-fail      { background-color: #ff8787; }
-.CodeMirror-trace-redo      { background-color: #ff0; }
-.CodeMirror-trace-exception { background-color: #f0f; }
+.CodeMirror-trace-call      { background-color: #8df !important; }
+.CodeMirror-trace-exit      { background-color: #0f0 !important; }
+.CodeMirror-trace-fail      { background-color: #ff8787 !important; }
+.CodeMirror-trace-redo      { background-color: #ff0 !important; }
+.CodeMirror-trace-exception { background-color: #f0f !important; }
