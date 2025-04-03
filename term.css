@@ -3,7 +3,7 @@
 */
 
 /* Make write output wrap correctly */
-div.write span.pl-adaptive {
+span.pl-adaptive {
     display: contents;
 }
 

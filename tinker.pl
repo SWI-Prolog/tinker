@@ -41,6 +41,7 @@
             dump_var/2
           ]).
 :- use_module(library(wasm)).
+:- use_module(library(dom)).
 :- use_module(library(prolog_wrap), [wrap_predicate/4]).
 :- use_module(library(ansi_term), [ansi_format/3]).
 :- use_module(library(debug), [debug/3]).
@@ -54,7 +55,6 @@
              prolog_stack_frame_property/2]).
 :- autoload(library(utf8), [utf8_codes/3]).
 :- autoload(library(dcg/basics), [string/3, number/3, remainder//1]).
-:- autoload(library(http/html_write), [html/3, print_html/1]).
 :- autoload(library(http/term_html), [term//2]).
 :- autoload(library(ansi_term), [ansi_format/3]).
 :- autoload(library(lists), [append/3]).
@@ -65,6 +65,9 @@
 :- meta_predicate
     html(:),
     tinker_run(+, :).
+
+:- html_meta
+    html(html).
 
 % imported from library(wasm).  This enables development.
 :- op(700, xfx, :=).           % Result := Expression
@@ -520,14 +523,9 @@ cls :-
 %       ?- html(['Hello ', b(world)]).
 
 html(Term) :-
-    phrase(html(Term), Tokens),
-    with_output_to(string(HTML), print_html(Tokens)),
-    Div := document.createElement("div"),
-    Div.className := "write",
-    Div.innerHTML := HTML,
     tinker_query(Q),
-    _ := Q.answer.appendChild(Div).
-
+    Answer := Q.answer,
+    append_html(Answer, Term).
 
 :- multifile
     term_html:blob_rendering//3.
@@ -545,7 +543,7 @@ prolog:message_line_element(S, '~W'-[T,Options]) :-
     stream_property(S, tty(true)),
     flush_output(S),
     memberchk(html(true), Options),
-    html(\term(T, Options)).
+    html(\term(T, [emit(html)|Options])).
 
 modify_write_options(true,  Opts, Opts1) =>
     Opts1 = [html(true)|Opts].
@@ -564,10 +562,10 @@ enable_html_console(Bool) :-
 
 :- enable_html_console(true).
 
+
                 /*******************************
                 *           MESSAGES           *
                 *******************************/
-
 :- multifile
     prolog:message//1.
 
