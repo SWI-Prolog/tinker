@@ -206,15 +206,15 @@ percent_decode([H|T]) -->
 percent_decode([]) -->
     [].
 
-link_location([file(File),line(Line),linepos(Column)]) -->
+link_location(#{file:File,line:Line,linepos:Column}) -->
     string(Codes), "#", number(Line), ":", number(Column),
     !,
     { atom_codes(File, Codes) }.
-link_location([file(File),line(Line)]) -->
+link_location(#{file:File,line:Line}) -->
     string(Codes), "#", number(Line),
     !,
     { atom_codes(File, Codes) }.
-link_location([file(File)]) -->
+link_location(#{file:File}) -->
     remainder(Codes),
     !,
     { atom_codes(File, Codes) }.
