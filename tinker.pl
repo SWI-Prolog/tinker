@@ -3,7 +3,7 @@
     Author:        Jan Wielemaker
     E-mail:        J.Wielemaker@vu.nl
     WWW:           http://www.swi-prolog.org
-    Copyright (c)  2022-2025, SWI-Prolog Solutions b.v.
+    Copyright (c)  2022-2026, SWI-Prolog Solutions b.v.
     All rights reserved.
 
     Redistribution and use in source and binary forms, with or without
@@ -467,12 +467,12 @@ ensure_extension(File0, Ext, File) :-
 complete_input(Before,After,Delete,Completions) :-
     complete_input_loaded,
     !,
-    prolog:complete_input(Before,After,Delete,Completions).
+    call(prolog:complete_input(Before,After,Delete,Completions)).
 complete_input(Before,After,Delete,Completions) :-
     use_module(library(console_input)),
     asserta(complete_input_loaded),
     !,
-    prolog:complete_input(Before,After,Delete,Completions).
+    call(prolog:complete_input(Before,After,Delete,Completions)).
 
 %!  pp(@Term) is det.
 %
