@@ -16,7 +16,8 @@ repo gives a list of possible improvements.
   - Run SWI-Prolog in your browser
   - Basic REPL loop window
   - Basic editor support based on [CodeMirror](https://codemirror.net/)
-  - Saves command history and programs to your browser _local store_
+  - Saves command history and programs to your browser _local store_.
+    Use `?- tinker_reset.` to clear this and start with a clean slate.
   - Allows uploading and downloading programs
   - Allows for loading (compiling) these programs as well a loading
     programs directly from the internet.

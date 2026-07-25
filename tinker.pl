@@ -38,6 +38,7 @@
             html/1,		% +HTMLTerm
             tinker_run/2,	% +TinkerQuery, :QueryString
             tinker_query/1,     % -TinkerQuery
+            tinker_reset/0,     %
             dump_var/2
           ]).
 :- use_module(library(wasm)).
@@ -652,6 +653,24 @@ ensure_extension(File0, Ext, File) :-
 ensure_extension(File0, Ext, File) :-
     file_name_extension(File0, Ext, File).
 
+		 /*******************************
+		 *          LOCAL STORE         *
+		 *******************************/
+
+%!  tinker_reset is det.
+%
+%   Remove all files and the query history Tinker keeps in the
+%   browser's _local store_ and reload the page.  Note that the page is
+%   reloaded without its query string, such that files that were
+%   preloaded from the page URL are not loaded again.
+
+tinker_reset :-
+    tinker_source(Source),
+    Removed := Source.persist.reset(),
+    print_message(informational, tinker(reset(Removed))),
+    Path := location.pathname,
+    _ := location.replace(#Path).
+
 %!  complete_input(+Before, +After, -Delete, -Completions) is det.
 %
 %   Perform completion on a query.
@@ -767,6 +786,14 @@ prolog:message(trace_help_table(Entries)) -->
 prolog:message(wasm(consult_user)) -->
     [ ansi(code, '?- [user].', []), ' is not supported in the browser', nl,
       'version. Please use the scratch.pl file or create a new file.'
+    ].
+prolog:message(tinker(reset(Removed))) -->
+    { Files   = Removed.get(files, 0),
+      History = Removed.get(history, 0)
+    },
+    [ 'Removed ~D file(s) and ~D history entries from the local store'-
+      [Files, History], nl,
+      'Reloading ...'
     ].
 
 help_table([]) ==>

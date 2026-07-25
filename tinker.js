@@ -2900,6 +2900,39 @@ export class Persist {
     localStorage.removeItem(this.fileKey(name));
   }
 
+  /**
+   * Remove all data  Tinker keeps in the  browser's localStorage.  As
+   * the current state would otherwise be  saved again when the page is
+   * left, this also clears {@link Persist#autosave}.  Used by the
+   * Prolog predicate `tinker_reset/0`, which reloads the page.
+   *
+   * @return {object} number of `files` and `history` entries removed.
+   */
+  reset() {
+    const removed = {files: 0, history: 0};
+
+    this.autosave = false;
+
+    for(const key of Object.keys(localStorage)) {
+      if ( !key.startsWith(this.prefix) )
+	continue;
+
+      const name = key.substring(this.prefix.length);
+      if ( name.startsWith("file/") ) {
+	removed.files++;
+      } else if ( name == "history" ) {
+	try
+	{ removed.history = JSON.parse(localStorage.getItem(key)).stack.length;
+	} catch(e)
+	{ removed.history = 0;
+	}
+      }
+      localStorage.removeItem(key);
+    }
+
+    return removed;
+  }
+
   restoreFile(name)
   { const content = localStorage.getItem(this.fileKey(name))||"";
 

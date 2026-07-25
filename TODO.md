@@ -18,6 +18,9 @@
    - Replace toplevel emscripten conditional code with wrapping
  - Turn into a new GIT submodule?
  - Allow save/load from GitHub?
+ - Allow selecting what `tinker_reset/0` removes (only the history,
+   only the files, only the files from a specific site, ...), either
+   as an argument or from a menu.
  - Write files that were loaded from a URL back to the server using
    HTTP PUT, using the origin recorded for the file.  Requires a server
    that accepts PUT as well as CORS pre-flight when the file is loaded
