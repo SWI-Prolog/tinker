@@ -23,15 +23,16 @@ repo gives a list of possible improvements.
   - Load large programs quickly as `.qlf` files.
   - Support for a basic debugger using the common `?- trace, mygoal.`
     command.   Support for spy- and break-points.
+  - Demonstrates _async_ support using Prolog _engines_.
 
 ## Limitations and alternatives
 
-SWI-Tinker is over 10 times slower  than native SWI-Prolog on the same
-hardware.   SWI-Tinker lacks  many libraries  bundled with  the native
-version, either for  reducing the size or  because required primitives
-are lacking.  It  also lacks important features of  SWI-Prolog such as
-_multi threading_ and  access to a lot of system  resources.  To get a
-list of available and not-available libraries, run
+SWI-Tinker is about two times slower than  native SWI-Prolog on the same
+hardware. SWI-Tinker lacks  many  libraries   bundled  with  the  native
+version, either for reducing the size or because required primitives are
+lacking. It also lacks important features   of SWI-Prolog such as _multi
+threading_ and access to a lot of  system   resources.  To get a list of
+available and not-available libraries, run
 
     ?- check_installation.
 
