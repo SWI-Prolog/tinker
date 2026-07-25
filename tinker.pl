@@ -76,6 +76,7 @@
 
 :- public
     tinker_init/1,
+    tinker_load_file/2,
     tty_link/1,
     trace_action/2,
     complete_input/4.
@@ -106,6 +107,151 @@ tinker_run(TinkerQuery, Query) :-
 tinker_query(TinkerQuery) :-
     nb_current(tinker_query, TinkerQuery).
 
+%!  tinker_source(-Source) is semidet.
+%
+%   Source is the JavaScript `Source` instance that manages the editor
+%   and the files in the browser's  file system.  Fails silently if we
+%   are not running in a Tinker instance, e.g., while Tinker itself is
+%   loaded or in a page that only embeds a console.
+
+tinker_source(Source) :-
+    tinker_query(Q),
+    catch(Source := Q.console.source, _, fail),
+    is_source(Source),
+    !.
+tinker_source(Source) :-
+    catch(Source := tinker.source, _, fail),
+    is_source(Source).
+
+is_source(Obj) :-
+    is_object(Obj, Class),
+    Class == 'Source'.
+
+		 /*******************************
+		 *      FILES FROM THE WEB      *
+		 *******************************/
+
+%!  tinker_load_file(:File, +Options) is semidet.
+%
+%   Hook for load_files/2 that loads a file for which Tinker holds a
+%   local copy (_mirror_) of a file that was loaded from a URL.  The
+%   content is taken from the mirror, i.e., from the file the user
+%   edits, but the file is loaded under the identity of the URL it
+%   came from.  As a result, relative loads from this file
+%   (include/1, ensure_loaded/1, absolute_file_name/3, ...) are
+%   resolved against the remote directory by library(wasm), while the
+%   user's edits do take effect.  Both
+%
+%       ?- consult('https://example.org/dir/run.pl').
+%       ?- consult('/prolog/web/example.org/dir/run.pl').
+%
+%   load the file this way, and so does make/0.
+%
+%   Note that we must set the file name of the stream ourselves: the
+%   mirror is a real file and thus '$prepare_load_stream'/3 does not
+%   name the stream after the URL.  We add derived_from/1 such that
+%   make/0, which cannot use time_file/2 on a URL, sees our changes.
+
+tinker_load_file(Module:File, Options) :-
+    atom(File),
+    tinker_source(Source),
+    mirror(Source, File, Path, URL),
+    !,
+    _ := Source.syncFile(#Path),                % flush a pending edit
+    (   must_load(Options, URL, Path)
+    ->  mirror_time(Path, Modified),
+        debug(tinker(load), 'Loading ~p as ~p', [Path, URL]),
+        setup_call_cleanup(
+            open(Path, read, In),
+            (   set_stream(In, file_name(URL)),
+                load_files(Module:URL,
+                           [ stream(In),
+                             modified(Modified),
+                             derived_from(Path)
+                           | Options
+                           ])
+            ),
+            close(In))
+    ;   debug(tinker(load), 'Not modified: ~p (~p)', [Path, URL]),
+        '$already_loaded'(File, URL, Module, Options)
+    ).
+
+%   library(wasm) provides a clause for user:prolog_load_file/2 that
+%   downloads any URL and it is loaded before us.  A clause compiled
+%   into this file would be added _after_ it and never be used.
+
+:- asserta((user:prolog_load_file(Spec, Options) :-
+                tinker:tinker_load_file(Spec, Options))).
+
+%!  mirror(+Source, +Spec, -Path, -URL) is semidet.
+%
+%   True when Path is a file in the browser's file system that holds
+%   the content of URL.  Spec is either the URL or the name of the
+%   mirror.  Note that the working directory is the directory holding
+%   the user files and that make/0 hands us the file without its
+%   extension.
+
+mirror(Source, Spec, Path, URL) :-
+    uri_is_global(Spec),
+    !,
+    plain_or_pl(Spec, URL),
+    Path := Source.mirrorFile(#URL),
+    Path \== '',
+    exists_file(Path).
+mirror(Source, Spec, Path, URL) :-
+    catch(absolute_file_name(Spec, Abs), _, fail),
+    plain_or_pl(Abs, Path),
+    exists_file(Path),
+    URL := Source.fileOrigin(#Path),
+    URL \== ''.
+
+plain_or_pl(Name, Name).
+plain_or_pl(Name0, Name) :-
+    \+ file_name_extension(_, pl, Name0),
+    file_name_extension(Name0, pl, Name).
+
+%!  must_load(+Options, +URL, +Path) is semidet.
+%
+%   True when we must (re)load the file.  consult/1 passes no if(_)
+%   and thus always reloads, which is what makes _(Re)consult_ pick up
+%   the user's edits.  For ensure_loaded/1 (if(not_loaded)) and
+%   use_module/2 we only reload if the mirror changed after we loaded
+%   it.  As library(wasm) does for files that changed on the server,
+%   we reload a changed file also for if(not_loaded).
+
+must_load(Options, _URL, _Path) :-
+    \+ option(if(_), Options),
+    !.
+must_load(Options, _URL, _Path) :-
+    option(if(true), Options),
+    !.
+must_load(_Options, URL, Path) :-
+    \+ up_to_date(URL, Path).
+
+up_to_date(URL, Path) :-
+    source_file(URL),
+    source_file_property(URL, modified(Loaded)),
+    catch(time_file(Path, Modified), _, fail),
+    Modified =< Loaded.
+
+%!  mirror_time(+Path, -Modified) is det.
+%
+%   Modification time  for the mirror,  used as `modified` stamp  for
+%   the URL.  Note that a stamp is required: without it source_file/1
+%   fails on the URL.
+
+mirror_time(Path, Modified) :-
+    catch(time_file(Path, Modified), _, fail),
+    float(Modified),
+    Modified > 0.0,
+    !.
+mirror_time(_, Modified) :-
+    get_time(Modified).
+
+		 /*******************************
+		 *            EDITOR            *
+		 *******************************/
+
 :- multifile
     prolog_edit:edit_source/1,
     prolog_edit:exists_location/1,
@@ -120,26 +266,60 @@ prolog_edit:edit_source(Spec) :-
     edit_source(Spec).
 
 edit_source(Spec) :-
-    Source := tinker.source,
+    tinker_source(Source),
     edit_source(Source, Spec).
 
 edit_source(Source, Options) :-
-    #{file:File} :< Options,
+    #{file:File0} :< Options,
+    editor_file(Source, File0, File),
+    !,
     (   File := Source.files.current
     ->  true
-    ;   load_file(File, String),
-        _ := Source.addFileOption(#File),
-        _ := Source.switchToFile(#File),
-        Source.value := String
+    ;   _ := Source.addFileOption(#File),
+        _ := Source.switchToFile(#File)
     ),
     (   #{line:Line} :< Options
     ->  _ := Source.goto(Line, Options)
     ;   true
     ).
 
+%!  editor_file(+Source, +Spec, -File) is semidet.
+%
+%   File is the file in the browser's file system that we can show in
+%   the editor for the source Spec.  If Spec is a URL we use its local
+%   mirror, downloading it if we do not have it yet.  This way, the
+%   set of files we mirror grows as the user opens files that were
+%   loaded indirectly, e.g., by clicking an error location in a file
+%   that was loaded by another file.
+
+editor_file(Source, Spec, File) :-
+    uri_is_global(Spec),
+    !,
+    prolog_source_file(Spec),
+    (   File0 := Source.mirrorFile(#Spec),
+        File0 \== '',
+        exists_file(File0)
+    ->  File = File0
+    ;   load_file(Spec, String),
+        File := Source.addMirror(#Spec, #String)
+    ).
+editor_file(_Source, Spec, Spec) :-
+    exists_file(Spec),
+    !.
+editor_file(_Source, Spec, Spec) :-
+    load_file(Spec, _String).           % `/swipl/...`: put it in the FS
+
+prolog_source_file(File) :-
+    file_name_extension(_, Ext, File),
+    user:prolog_file_type(Ext, prolog).
+
 prolog_edit:exists_location(Spec) :-
     #{file:File} :< Spec,
-    sub_atom(File, 0, _, _, '/swipl/').
+    (   sub_atom(File, 0, _, _, '/swipl/')       % system source, downloadable
+    ->  true
+    ;   uri_is_global(File),                     % loaded from a URL
+        prolog_source_file(File)
+    ).
 
 load_file(Spec, String) :-
     uri_is_global(Spec),
@@ -185,9 +365,9 @@ tty_link(Link) :-
     phrase(percent_decode(UTF8), Codes),
     phrase(utf8_codes(URLCodes), UTF8),
     phrase(link_location(Location), URLCodes),
-    memberchk(file(URL), Location),
+    get_dict(file, Location, URL),      % link_location//1 yields a dict
     uri_is_global(URL),
-    file_name_extension(_, pl, URL),
+    prolog_source_file(URL),
     !,
     edit_source(Location).
 
@@ -288,18 +468,31 @@ show_source_location(frame(Frame, _Choice, Port, _PC)) :-
 %   goal to show the source.
 
 show_trace_source(Port, File:Line) :-
+    tinker_source(Source),
     (   is_async
     ->  true
-    ;   access_file(File, read)
+    ;   have_source(Source, File)
     ),
     port_css_class(Port, CSSClass, Title),
-    tinker_query(Q),
-    Source := Q.console.source,
     edit_source(Source, #{file: File,
                           line: Line,
                           className: CSSClass,
                           title:Title
                          }).
+
+%!  have_source(+Source, +File) is semidet.
+%
+%   True when we can show File  without downloading it.  Note that we
+%   cannot download from the debugger callback as it cannot yield.
+
+have_source(Source, File) :-
+    uri_is_global(File),
+    !,
+    Path := Source.mirrorFile(#File),
+    Path \== '',
+    exists_file(Path).
+have_source(_Source, File) :-
+    access_file(File, read).
 
 port_css_class(call,           "CodeMirror-trace-call",      "Trace call port").
 port_css_class(exit,           "CodeMirror-trace-exit",      "Trace exit port").

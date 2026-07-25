@@ -49,7 +49,12 @@ mapping is `elem.data.instance`.  Module-global `Module` (the SWIPL WASM module)
 and `Prolog` (`Module.prolog`) are initialised once by the `Tinker` constructor.
 
 - `Tinker` — wires the components to the DOM in `div.content`, consults
-  `tinker.pl` into module `system` and calls `tinker:tinker_init/1`.
+  `tinker.pl` into module `system` and calls `tinker:tinker_init/1`.  Prolog
+  startup and editor startup are two independent async chains (the editor comes
+  from a CDN); `Tinker.prologReady` (static) and `Source.ready` are joined into
+  `Tinker.ready`.  With the `preload` option, `Tinker.preload()` then loads the
+  files named in the page's query string (`?<url>`, `?url=`, `?code=`) and
+  consults them.
 - `Console` — owns the stack of `Query` elements, output printing (`print(line,
   cls, sgr)` from the WASM `on_output` hook), history, tty size, tty hyperlinks.
 - `Query` — the heart of the system: one Prolog query's whole life cycle.  It
@@ -65,6 +70,16 @@ and `Prolog` (`Module.prolog`) are initialised once by the `Tinker` constructor.
   and a CodeMirror 5 instance loaded at runtime via require.js from CDN
   (mode/theme `prolog` come from swi-prolog.org).  Files live in the WASM
   virtual FS under `/prolog` (`user_dir`), default `/prolog/scratch.pl`.
+  `Source.addFile()` (and `fetchFile`/`addFileFromURL` on top of it) is the one
+  path for getting a file into Tinker — demos, uploads and preloads all use it;
+  `consultFiles()` injects the `consult/1` query.  `Source.ready` resolves after
+  `afterEditor()` has restored the files and added the demos.
+  A file that came from a URL keeps that URL in `files.origins` (path → URL,
+  persisted alongside `files`); such a file is a *mirror*, lives under
+  `mirror_dir` (`/prolog/web/<host>/<url path>`) and is consulted **under its
+  URL**, not its local path.  `setOrigin`/`fileOrigin`/`mirrorFile`/`mirrorPath`/
+  `addMirror`/`syncFile` manage this (the last three are called from
+  `tinker.pl`); `displayName()` is what the file menu shows.
   Demo entries in the file menu come from `examples/index.json` and load from
   `/wasm/examples/<name>`.
 - `Input` — the `<input>` embedded in a `Query`; behaviour depends on the query
@@ -83,7 +98,12 @@ and `Prolog` (`Module.prolog`) are initialised once by the `Tinker` constructor.
   `wrap_predicate/4`s the tty input predicates (`read/1`, `get_char/1`, ...) so
   they yield to the browser, wraps `absolute_file_name/3` to accept URLs, and
   enables HTML rendering of answer terms (`html_term` flag,
-  `prolog:message_line_element/3`).
+  `prolog:message_line_element/3`).  It also `asserta`s a
+  `user:prolog_load_file/2` clause (`tinker_load_file/2`) that loads a mirrored
+  file from the editor buffer but **under the identity of its origin URL**, so
+  relative loads inside it resolve against the remote directory.  The `asserta`
+  is essential: `library(wasm)`'s own clause is loaded first and would otherwise
+  download the URL and skip the load as `already_loaded`.
 - `highlight.pl` (module `highlight`) — semantic highlighting.  `Editor` calls
   `highlight:refresh_clause/2` for the clause around the caret on every change
   and `highlight:highlight_all/1` for the whole buffer on load and after ~2s

@@ -115,6 +115,15 @@ export class Source {
   elem;				// The <form>
   persist;			// Persist instance
   con;				// Console instance
+  mirror_dir;			// Directory for files loaded from a URL
+  /**
+   * Resolved with  myself after the  editor is created,  the files
+   * are restored  from the  browser's localStorage and  the demos
+   * are added to the file menu.
+   * @type {Promise<Source>}
+   */
+  ready;
+  #readySignal;			// Resolve `ready`
 
   /**
    * Create the Tinker source file  manager from an DOM structure that
@@ -126,6 +135,9 @@ export class Source {
    * @param {object} [options] Options processed.
    * @param {string} [options.user_dir] Working directory where user
    * files are placed.  Defaults to `"/prolog"`.
+   * @param {string} [options.mirror_dir] Directory below which files
+   * that are loaded from a URL are placed, using a directory structure
+   * that reflects the URL.  Defaults to `"/prolog/web"`.
    * @param {string} [options.default_file_name] Default (scratch)
    * file.  Defaults to `"scratch.pl"`
    * @param {Persist} [options.persist] Persistency manager.  Defaults
@@ -146,15 +158,18 @@ export class Source {
     if ( this.con )
       this.con.source = this;
     this.user_dir = opts.user_dir||"/prolog";
+    this.mirror_dir = opts.mirror_dir||`${this.user_dir}/web`;
     this.default_file =
       `${this.user_dir}/${opts.default_file_name||"scratch.pl"}`
     this.files = { current: this.default_file,
-		   list: [this.default_file]
+		   list: [this.default_file],
+		   origins: {}		// file -> URL it was loaded from
 		 };
     this.select_file = this.byname("select-file");
 
-    Module.FS.mkdir(this.user_dir);
+    Module.FS.mkdirTree(this.user_dir);
 
+    this.ready = new Promise((resolve) => { this.#readySignal = resolve; });
     this.editor = new Editor(this.byname("editor"),
 			     () => self.afterEditor(),
 			     { source:this });
@@ -168,9 +183,22 @@ export class Source {
     this.armConsult();
   }
 
-  afterEditor() {
+  /**
+   * Called after the editor  has been created.  Restores the files
+   * from the browser's localStorage, adds the demos to the file menu
+   * and finally resolves {@link Source#ready}.  Note that the demos
+   * must be added before we are ready as {@link Source#addFileOption}
+   * inserts before the demos and {@link Source#addExamples} skips
+   * demos for which the user has a file.
+   */
+  async afterEditor() {
     this.persist.restore();
-    this.addExamples();
+    try
+    { await this.addExamples();
+    } catch(e)				// no examples/index.json
+    { console.error("Tinker: could not add demos:", e);
+    }
+    this.#readySignal(this);
   }
 
   set value(source)     { this.editor.value = source; }
@@ -206,10 +234,11 @@ export class Source {
       select.appendChild(sep);
 
       json.forEach((ex) => {
-	if ( !this.hasFileOption(this.userFile(ex.name)) ) {
+	const url = `/wasm/examples/${ex.name}`;
+	if ( !this.mirrorFile(new URL(url, window.location.href).href) ) {
 	  const opt = document.createElement("option");
 	  opt.className = "url";
-	  opt.value = "/wasm/examples/"+ex.name;
+	  opt.value = url;
 	  opt.textContent = (ex.comment||ex.name) + " (demo)";
 	  select.appendChild(opt);
 	}
@@ -229,7 +258,7 @@ export class Source {
 
     if ( !node )
     { node = document.createElement('option');
-      node.textContent = this.baseName(name);
+      node.textContent = this.displayName(name);
       node.value = name;
       node.selected = true;
       const sep = this.demoOptionSep();
@@ -238,6 +267,7 @@ export class Source {
       else
 	select.appendChild(node);
     }
+    node.title = this.fileOrigin(name);	// show the origin as tooltip
 
     return node;
   }
@@ -265,6 +295,340 @@ export class Source {
     }
   }
 
+		 /*******************************
+		 *      FILES FROM THE WEB      *
+		 *******************************/
+
+  /**
+   * Set or  clear the  URL a  file was loaded  from.  Files  with an
+   * origin are  _mirrors_: they are  consulted under their  URL (see
+   * {@link Source#consultFiles} and `tinker:tinker_load_file/2`) such
+   * that relative  loads from the  file are resolved  against the
+   * remote directory, while the local copy provides the content.
+   *
+   * @param {string} file Absolute path of a user file.
+   * @param {string} [url] URL, may be relative to the page.  If
+   * omitted, the origin is removed.
+   */
+  setOrigin(file, url) {
+    if ( url )
+      this.files.origins[file] = new URL(url, window.location.href).href;
+    else
+      delete this.files.origins[file];
+  }
+
+  /**
+   * @param {string} file Absolute path of a user file.
+   * @return {string} the URL `file` was loaded from or `""`.  This is
+   * called from Prolog, hence `""` rather than `undefined`.
+   */
+  fileOrigin(file) {
+    return this.files.origins[file]||"";
+  }
+
+  /**
+   * @param {string} url Absolute URL.
+   * @return {string} the local file that mirrors `url` or `""`.
+   */
+  mirrorFile(url) {
+    const origins = this.files.origins;
+
+    for(const file of Object.keys(origins)) {
+      if ( origins[file] == url )
+	return file;
+    }
+
+    return "";
+  }
+
+  /**
+   * Local file to  use for the mirror of `url`.   We recreate the
+   * directory structure  of the URL  below `mirror_dir` such  that a
+   * program and  the files it  loads keep their relation  and files
+   * from different sites cannot collide.  For example
+   *
+   * ```
+   * https://example.org/dir/run.pl
+   *     -> /prolog/web/example.org/dir/run.pl
+   * ```
+   *
+   * @param {string} url Absolute URL.
+   * @return {string} absolute path below `mirror_dir`.
+   */
+  mirrorPath(url) {
+    const found = this.mirrorFile(url);
+    if ( found )
+      return found;
+
+    const u    = new URL(url, window.location.href);
+    const dirs = [ safeFileName(u.host.replace(/:/g, "_")),
+		   ...u.pathname.split("/").slice(0,-1)
+		                .filter((s) => s != "")
+		                .map(safeFileName)
+		 ];
+    const base = this.urlFileName(url);
+    const ext  = /^(.*?)(\.[^.]*)?$/.exec(base);
+    let file   = [this.mirror_dir, ...dirs, base].join("/");
+
+    // Two URLs can still map onto the same file, e.g., if they only
+    // differ in their scheme or in a character we do not allow.
+    for(let i=2; this.fileOrigin(file) != ""; i++)
+      file = [this.mirror_dir, ...dirs, `${ext[1]}_${i}${ext[2]||""}`].join("/");
+
+    return file;
+  }
+
+  /**
+   * @param {string} file Absolute path of a user file.
+   * @return {bool} `true` if `file` is mirrored from a URL.
+   */
+  isMirrorFile(file) {
+    return file.startsWith(`${this.mirror_dir}/`);
+  }
+
+  /**
+   * Name  to display  in the  file  menu.  Files  mirrored from  a
+   * URL are shown  as `host/dir/file.pl`, eliding  the middle of
+   * long paths.  The full URL is available as tooltip.
+   *
+   * @param {string} file Absolute path of a user file.
+   * @return {string} name to display.
+   */
+  displayName(file) {
+    if ( !this.isMirrorFile(file) )
+      return this.baseName(file);
+
+    const rel  = file.substring(this.mirror_dir.length+1).split("/");
+    const base = rel.pop();
+    const host = rel.shift();
+
+    if ( rel.length <= 2 )
+      return [host, ...rel, base].join("/");
+    return [host, "…", rel[rel.length-1], base].join("/");
+  }
+
+  /**
+   * Create the directory holding `file` if it does not exist.
+   * @param {string} file Absolute path of a file.
+   */
+  ensureDir(file) {
+    const dir = file.replace(/\/[^/]*$/, "");
+
+    if ( dir != "" )
+      Module.FS.mkdirTree(dir);
+  }
+
+  /**
+   * Create or refresh the local  copy of `url`.  Called from Prolog
+   * when the user opens  a file that was loaded from  a URL, e.g. by
+   * `edit/1` or by clicking an error location.
+   *
+   * @param {string} url URL the content came from.
+   * @param {string} content Content of the file.
+   * @param {object} [options] See {@link Source#addFile}.  By default
+   * the file is __not__ displayed in the editor.
+   * @return {string} the absolute path of the mirror.
+   */
+  addMirror(url, content, options) {
+    const origin = new URL(url, window.location.href).href;
+
+    options = Object.assign({switchTo:false}, options||{}, {origin});
+    return this.addFile(this.mirrorPath(origin), content, options);
+  }
+
+  /**
+   * Make sure  the WASM file system  copy of `file`  reflects what is
+   * in the editor.  Only writes if the content changed, such that the
+   * modification time keeps its meaning for `ensure_loaded/1`, `make/0`
+   * and friends.  Called from Prolog before consulting a mirror.
+   *
+   * @param {string} file Absolute path of a user file.
+   * @return {bool} `true` if the file was written.
+   */
+  syncFile(file) {
+    if ( file == this.files.current && this.isUserFile(file) ) {
+      const content = this.value;
+      let old;
+
+      try
+      { old = Module.FS.readFile(file, {encoding:'utf8'});
+      } catch(e)
+      { old = undefined;
+      }
+
+      if ( old !== content ) {
+	Module.FS.writeFile(file, content);
+	return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Add a  file to the  WASM file system  and the file  menu.  This
+   * is the  single entry point  for getting  a file into  Tinker: it
+   * is used  for the demos,  uploaded files and  files preloaded by
+   * {@link Tinker#preload}.  If the file exists it is overwritten.
+   *
+   * @param {string} name Base name or absolute path in `user_dir`.
+   * @param {string} content Content for the file.
+   * @param {object} [options]
+   * @param {bool} [options.switchTo] If `false`, do not display the
+   * file in the editor.
+   * @param {string} [options.origin] URL this content came from.  See
+   * {@link Source#setOrigin}.  A previous origin is cleared if this
+   * option is not provided.
+   * @return {string} the absolute path of the file.
+   */
+  addFile(name, content, options) {
+    options = options||{};
+    const file = this.isUserFile(name)
+	  ? name
+	  : this.userFile(this.baseName(name));
+
+    this.ensureDir(file);
+    Module.FS.writeFile(file, content);	// before switchToFile(): that
+    this.setOrigin(file, options.origin);// loads the file from the FS
+    this.addFileOption(file);
+
+    if ( this.files.current == file ) {	// switchToFile() is a no-op
+      this.value = content;
+      this.updateDownload(file);
+    } else if ( options.switchTo !== false ) {
+      this.switchToFile(file);
+    } else if ( !this.files.list.includes(file) ) {
+      this.files.list.push(file);
+    }
+
+    return file;
+  }
+
+  /**
+   * Fetch a file over HTTP.
+   * @param {string} url URL to fetch.  May be relative to the page.
+   * @return {Promise<object>} object holding `name`, the base name
+   * derived from the URL, `content` and `url`, the absolute URL that
+   * was fetched.  The promise is rejected if the URL is invalid or
+   * cannot be fetched.
+   */
+  async fetchFile(url) {
+    const name = this.urlFileName(url);	// throws on an invalid URL
+    const abs  = new URL(url, window.location.href).href;
+    const res  = await fetch(abs);
+    if ( !res.ok )
+      throw new Error(`${res.status} ${res.statusText}`);
+
+    return { name, content: await res.text(), url: abs };
+  }
+
+  /**
+   * Fetch `url` and add its content as a user file.  The file
+   * remembers `url` as its origin.
+   * @param {string} url URL to fetch.  May be relative to the page.
+   * @param {object} [options] See {@link Source#addFile}
+   * @return {Promise<string>} the absolute path of the file.
+   */
+  async addFileFromURL(url, options) {
+    const {name, content, url:origin} = await this.fetchFile(url);
+    return this.addFile(name, content, Object.assign({origin}, options||{}));
+  }
+
+  /**
+   * Derive the name  of a user file from a  URL.  Removes the search
+   * and fragment  of the URL, replaces  characters we do not  want in
+   * a file name and adds `.pl` if the URL carries no extension.
+   * @param {string} url URL.  May be relative to the page.
+   * @return {string} base name for the file.
+   */
+  /**
+   * File name  for the  `name=` parameter of  a `code=`  preload.  We
+   * only accept a plain file name in `user_dir`.
+   * @param {string} name Name from the query string
+   * @return {string} base name for the file.
+   */
+  codeFileName(name) {
+    let base = safeFileName(this.baseName(name));
+
+    if ( base == "" )
+      base = "code.pl";
+    if ( !base.includes(".") )
+      base += ".pl";
+
+    return base;
+  }
+
+  urlFileName(url) {
+    const u = new URL(url, window.location.href);
+    let base = safeFileName(u.pathname.split("/").pop());
+
+    if ( base == "" )
+      base = "unnamed.pl";
+    if ( !base.includes(".") )
+      base += ".pl";
+
+    return base;
+  }
+
+  /**
+   * Consult files by injecting a query into the console.  All files
+   * are  consulted from  a single  query because  {@link Console#injectQuery}
+   * cannot start a  new query while a previous one  is still running.
+   *
+   * Files that  were loaded from  a URL  are consulted using  the URL
+   * they came from.  See {@link Source#setOrigin}.
+   *
+   * @param {string[]} [files] Files to consult.  These may be files in
+   * the WASM file system as well as URLs.  Default is the file that is
+   * currently displayed in the editor.
+   * @return {bool} `true` if a query was injected.
+   */
+  consultFiles(files) {
+    if ( !this.con )
+      return false;
+
+    if ( !files ) {
+      const file = this.ensureSavedCurrentFile();
+      files = file ? [file] : [];
+    }
+    if ( files.length == 0 )
+      return false;
+
+    const ids  = files.map((f) => this.fileOrigin(f)||f);
+    const goal = ids.length == 1
+	  ? `consult(${prologAtom(ids[0])}).`
+	  : `consult([${ids.map(prologAtom).join(",")}]).`;
+    this.con.injectQuery(goal);
+
+    return true;
+  }
+
+  /**
+   * Print an informational message to the console.
+   * @param {string} msg Message to print.  Printed as a Prolog comment.
+   */
+  printMessage(msg) {
+    if ( this.con )
+      this.con.printMessage(`% ${msg}\n`, "stderr", {color:"blue"});
+    else
+      console.log(msg);
+  }
+
+  /**
+   * Print an error message to the console.
+   * @param {string} msg Message to print.
+   * @param {Error} [err] Exception that caused this error.  Printed
+   * on the browser console for developers.
+   */
+  printError(msg, err) {
+    if ( err )
+      console.error(err);
+    if ( this.con )
+      this.con.printMessage(`% ERROR: ${msg}\n`, "stderr", {color:"red"});
+    else
+      console.error(msg);
+  }
+
   /**
    * Delete a  file from  the menu,  the file  system and  the browser
    * localStorage.  The source view switches  to the next file, unless
@@ -285,6 +649,7 @@ export class Source {
     this.switchToFile(to.value);
     opt.parentNode.removeChild(opt);
     this.files.list = this.files.list.filter((n) => (n != file));
+    this.setOrigin(file);
     this.persist.removeFile(file);
     Module.FS.unlink(file);
   }
@@ -308,15 +673,20 @@ export class Source {
       const opt = this.currentFileOption();
 
       if ( opt.className == "url" ) {
-	fetch(opt.value)
-	  .then((res) => res.text())
-	  .then((s) => {
-	    const name = this.baseName(opt.value);
+	const url = opt.value;
+	this.fetchFile(url)
+	  .then(({content, url:origin}) => {
+	    // Turn the demo into a local file before addFile() adds it
+	    // to the menu, as we would else get a second entry.
+	    const file = this.mirrorPath(origin);
 	    opt.className = "local";
-	    opt.value = this.userFile(name);
-	    opt.textContent = name;
-	    Module.FS.writeFile(opt.value, s);
-	    this.switchToFile(opt.value);
+	    opt.value = file;
+	    opt.textContent = this.displayName(file);
+	    this.addFile(file, content, {origin});
+	  })
+	  .catch((e) => {
+	    this.printError(`Failed to load ${url}: ${loadErrorMessage(e)}`, e);
+	    this.switchToFile(this.files.current);
 	  });
       } else
       { this.switchToFile(opt.value);
@@ -413,12 +783,7 @@ export class Source {
   async download_files(files) {
     for(let i=0; i<files.length; i++) {
       const file = files[i];
-      const content = await this.readAsText(file);
-      const name = this.userFile(this.baseName(file.name));
-      this.addFileOption(name);
-      this.switchToFile(name);
-      this.value = content;
-      this.ensureSavedCurrentFile();
+      this.addFile(this.baseName(file.name), await this.readAsText(file));
     }
   }
 
@@ -442,8 +807,7 @@ export class Source {
   ensureSavedCurrentFile() {
     const file = this.files.current;
     if ( file ) {
-      if ( this.isUserFile(file) )
-	Module.FS.writeFile(file, this.value);
+      this.syncFile(file);
       return file;
     }
   }
@@ -457,8 +821,7 @@ export class Source {
     if ( btn )
       btn.addEventListener('click', (e) => {
 	e.preventDefault();
-	const file = this.ensureSavedCurrentFile();
-	this.con.injectQuery(`consult('${file}').`); // TODO: quote
+	this.consultFiles();
       }, false);
   }
 
@@ -1009,6 +1372,149 @@ function loadCSS(url)
 }
 
 		 /*******************************
+		 *         QUERY STRING         *
+		 *******************************/
+
+/**
+ * Parse the query string of the page into a list of files that must
+ * be preloaded by {@link Tinker#preload}.  Accepted forms are
+ *
+ *   - `?<url>` <br>
+ *     The entire query string is a single URL.  It is __not__ split
+ *     at `&`, so the URL may have a query string of its own.
+ *   - `?url=<url>` <br>
+ *     URL to load.  May be repeated to load multiple files.
+ *   - `?code=<text>` <br>
+ *     Prolog text to load.  May be repeated.
+ *   - `?name=<file>` <br>
+ *     Name for the file created from the preceding `code=`.  Default
+ *     is `code.pl`.
+ *
+ * Values  of `url`  and `code`  must be  encoded using  JavaScript's
+ * `encodeURIComponent()`.  Note that  this does not encode  `+`.  We
+ * deliberately  do not  use `URLSearchParams`,  which maps  `+` onto
+ * a space and thus breaks e.g., `?code=X is 1+2.`
+ *
+ * A query string that starts with a parameter we do not know is
+ * ignored.  This allows embedding Tinker in a page that uses the
+ * query string for its own purposes.
+ *
+ * @param {string} search Query string, e.g., `window.location.search`
+ * @return {object[]} List of objects holding `type` (`"url"` or
+ * `"code"`) and `value`, in the order they appear in `search`.
+ * Objects of type `"code"` may have a `name`.
+ */
+
+export function parsePreloadSearch(search) {
+  const s = (search||"").replace(/^\?/, "");
+
+  if ( s == "" )
+    return [];
+
+  const m = /^([a-zA-Z_][a-zA-Z0-9_]*)=/.exec(s);
+  if ( !m )				// bare ?<url>
+    return [ {type:"url", value:decodeURL(s)} ];
+  if ( !preload_params.includes(m[1]) ) {
+    console.warn(`Tinker: ignoring query string "${s}"`);
+    return [];
+  }
+
+  const items = [];
+  for(let part of s.split("&")) {
+    const i   = part.indexOf("=");
+    const key = i < 0 ? part : part.substring(0,i);
+    const val = i < 0 ? ""   : decodeParam(part.substring(i+1));
+    const last = items[items.length-1];
+
+    switch(key)
+    { case "url":
+      case "code":
+	items.push({type:key, value:val});
+        break;
+      case "name":
+	if ( last && last.type == "code" )
+	  last.name = val;
+	else
+	  console.warn(`Tinker: "name" does not follow a "code" parameter`);
+        break;
+      default:
+	console.warn(`Tinker: ignoring query string parameter "${key}"`);
+    }
+  }
+
+  return items;
+}
+
+const preload_params = ["url", "code", "name"];
+
+/**
+ * `decodeURIComponent()` that returns its input on invalid escapes.
+ */
+function decodeParam(s) {
+  try
+  { return decodeURIComponent(s);
+  } catch(e)				// URIError on a stray `%`
+  { return s;
+  }
+}
+
+/**
+ * Turn a  path segment of  a URL into  a name we  accept in the  WASM
+ * file system.  Notably removes the `..` and `.` special names.
+ * @param {string} s Segment of the path of a URL
+ * @return {string} name for a file or directory
+ */
+
+function safeFileName(s) {
+  return decodeParam(s)
+	     .replace(/[^a-zA-Z0-9._-]/g, "_")
+	     .replace(/^\.+/, "");
+}
+
+/**
+ * Decode a bare `?<url>`.  As the URL is not required to be encoded,
+ * we only decode if it does not start with a scheme and contains an
+ * escape, i.e., we accept both `?https://x/a.pl` and `?https%3A//x/a.pl`.
+ */
+function decodeURL(s) {
+  if ( !/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(s) && s.includes("%") )
+    return decodeParam(s);
+  return s;
+}
+
+/**
+ * Quote a string as a Prolog atom.  We always quote, which is both
+ * simpler and always correct.
+ * @param {string} s Text to represent as a Prolog atom
+ * @return {string} quoted atom, e.g. `'/prolog/my file.pl'`
+ */
+
+export function prologAtom(s) {
+  const esc = String(s)
+	.replace(/\\/g, "\\\\")
+	.replace(/'/g, "\\'")
+	.replace(/[\x00-\x1f]/g,
+		 (c) => `\\x${c.charCodeAt(0).toString(16)}\\`);
+
+  return `'${esc}'`;
+}
+
+/**
+ * Turn an exception from `fetch()` into a message.  A failure to
+ * connect or a CORS violation only provides `TypeError: Failed to
+ * fetch`, which is not of much help to the user.
+ * @param {Error} e Exception raised
+ * @return {string} message to display
+ */
+
+function loadErrorMessage(e) {
+  if ( e instanceof TypeError )
+    return `${e.message} (server unreachable or it does not send \
+Access-Control-Allow-Origin)`;
+  return e.message||String(e);
+}
+
+		 /*******************************
 		 *       OUTPUT STRUCTURE       *
 		 *******************************/
 
@@ -1221,6 +1727,7 @@ export class Console {
    * @param {string} cls class (stream), one of `"stdout"` or `"stderr"`
    * @param {object} [sgr] parsed ANSI sequence.  Currently provides
    * `color`, `background_color`, `bold`, `underline` or `link`.
+   * @return {HTMLElement} the element that was added.
    */
   print(line, cls, sgr, query) {
     query = query||this.currentQuery();
@@ -1259,6 +1766,27 @@ export class Console {
       out = this.output;
 
     out.appendChild(node);
+
+    return node;
+  }
+
+  /**
+   * Print a message that is not  the output of a query, e.g., a file
+   * that  could not  be loaded.   Unlike {@link Console#print},  this
+   * inserts  above the  prompt of  the open  query rather  than below
+   * it.
+   *
+   * @param {string} line content that must be printed
+   * @param {string} cls class (stream), one of `"stdout"` or `"stderr"`
+   * @param {object} [sgr] see {@link Console#print}
+   */
+  printMessage(line, cls, sgr) {
+    const node  = this.print(line, cls, sgr);
+    const query = this.lastQuery();
+
+    if ( query && query.elem != node && node.parentNode == this.output &&
+	 query.elem.parentNode == this.output )
+      this.output.insertBefore(node, query.elem);
   }
 
   /**
@@ -2376,18 +2904,27 @@ export class Persist {
   { const content = localStorage.getItem(this.fileKey(name))||"";
 
     if ( content || name == this.source.default_file )
-    { Module.FS.writeFile(name, content);
+    { this.source.ensureDir(name);
+      Module.FS.writeFile(name, content);
       this.source.addFileOption(name);
     } else
     { this.source.files.list = this.source.files.list
 				.filter((n) => (n != name));
+      this.source.setOrigin(name);
     }
   }
 
   restoreFiles()
-  { const self = this;
-    let f = localStorage.getItem(this.itemKey("files"));
-    if ( f ) this.source.files = JSON.parse(f);
+  { const self  = this;
+    const files = this.source.files;
+    const f = localStorage.getItem(this.itemKey("files"));
+
+    if ( f )				// may predate `origins`
+    { const saved = JSON.parse(f);
+      if ( Array.isArray(saved.list) ) files.list    = saved.list;
+      if ( saved.current )             files.current = saved.current;
+      files.origins = saved.origins||{};
+    }
 
     this.source.files.list.forEach((f) => self.restoreFile(f));
     if ( !this.source.files.list.includes(this.source.default_file) )
@@ -2424,11 +2961,17 @@ export class Persist {
     this.source.ensureSavedCurrentFile();
 
     const l = this.source.files.list.filter((n) => this.source.isUserFile(n));
+    const origins = {};
+    l.forEach((f) => { const url = this.source.fileOrigin(f);
+		       if ( url )
+			 origins[f] = url;
+		     });
     const save =
 	  { list: l,
 	    current: l.includes(this.source.files.current)
 		? this.source.files.current
-		: this.source.default_file
+		: this.source.default_file,
+	    origins
 	  };
 
     localStorage.setItem(this.itemKey("files"), JSON.stringify(save));
@@ -2458,7 +3001,12 @@ export class Persist {
  */
 
 export class Tinker {
-  static prepared = false;	// Only do this once
+  /**
+   * Resolved after `tinker.pl` is loaded and initialised.  Only the
+   * first instance loads Prolog, so this is a static property.
+   * @type {Promise}
+   */
+  static prologReady = null;
   /**
    * @type {Persist}
    */
@@ -2471,6 +3019,13 @@ export class Tinker {
    * @type {Source}
    */
   source;			// Source instance
+  /**
+   * Resolved  with myself  after Prolog  is initialised  __and__ the
+   * editor and file menu are ready.  Note that the Prolog and editor
+   * startup are independent: the editor is loaded from a CDN.
+   * @type {Promise<Tinker>}
+   */
+  ready;
 
   /**
    * Instantiate `Tinker` from an HTML DOM tree.   See `tinker.html`
@@ -2489,6 +3044,9 @@ export class Tinker {
    * @param {SWIPL} [options.module] WASM module holding SWI-Prolog.
    * __must__ be provided on first invocation.
    * @param {bool} [options.banner] If `true`, print welcome banner.
+   * @param {bool|string} [options.preload] If `true`, preload the files
+   * from the query string of the page.  See {@link Tinker#preload}.  If
+   * a string, this is used as the query string.
    */
   constructor(options) {
     options = options||{};
@@ -2511,19 +3069,121 @@ export class Tinker {
 			      });
 
     // Prepare SWI-Prolog
-    if ( !Tinker.prepared ) {
-      Tinker.prepared = true;
-      Prolog.consult("tinker.pl", {module:"system"}).then(() => {
-	Prolog.query("tinker:tinker_init(Dir)",
-		     {Dir:this.source.user_dir}).once();
-	if ( options.banner )
-	  Prolog.call("version");
-	this.console.addQuery();
-      });
-    } else {
+    if ( !Tinker.prologReady ) {
+      Tinker.prologReady =
+	Prolog.consult("tinker.pl", {module:"system"}).then(() => {
+	  Prolog.query("tinker:tinker_init(Dir)",
+		       {Dir:this.source.user_dir}).once();
+	});
+    }
+    Tinker.prologReady.then(() => {
       if ( options.banner )
 	Prolog.call("version");
-      this.console.addQuery();
+      this.console.addQuery();	// must be done before we can inject
+    });				// a query into the console.
+
+    this.ready = Promise.all([ Tinker.prologReady, this.source.ready ])
+	                .then(() => this);
+
+    if ( options.preload )
+      this.ready
+	  .then(() => this.preload(options.preload === true
+				   ? window.location.search
+				   : options.preload))
+	  .catch((e) => console.error(e));
+  }
+
+  /**
+   * Preload files from  the query string of the page.   This allows a
+   * link  to  open Tinker  with  one  or  more programs  loaded,  for
+   * example
+   *
+   * ```
+   * https://wasm.swi-prolog.org/wasm/tinker?https://example.org/hello.pl
+   * ```
+   *
+   * See {@link parsePreloadSearch}  for the accepted forms.   Each of
+   * the files  is added as a  user file and displayed  in the editor,
+   * after  which  all  files  are consulted.   Files  that  cannot
+   * be loaded are reported on the console and skipped.  URLs that do
+   * not refer to Prolog _source_ (e.g., `.qlf` files) are consulted
+   * from their URL and are not added to the editor.
+   *
+   * @param {string} search Query string, e.g., `window.location.search`
+   * @return {Promise<string[]>} the files and URLs that are consulted.
+   */
+  async preload(search) {
+    const source = this.source;
+    const jobs = [];
+    let codes = 0;
+
+    // Establish the target file names before fetching such that the
+    // numbering of `code=` parameters does not depend on the order in
+    // which the fetches complete.
+    for(let item of parsePreloadSearch(search)) {
+      if ( item.type == "code" ) {
+	const name = item.name
+	      ? source.codeFileName(item.name)
+	      : ( ++codes == 1 ? "code.pl" : `code_${codes}.pl` );
+	jobs.push({ file: source.userFile(name), content: item.value });
+      } else {
+	jobs.push({ url: item.value });
+      }
+    }
+
+    const loaded = (await Promise.all(jobs.map((j) => this.#preload(j))))
+	           .filter((j) => j != null);
+    // Only display the last file to avoid needless editor updates.
+    const show = loaded.reduce((last, j, i) =>
+			       j.content !== undefined ? i : last, -1);
+    const consult = [];
+
+    loaded.forEach((job, i) => {
+      if ( job.content !== undefined ) {
+	if ( source.files.list.includes(job.file) )
+	  source.printMessage(`Replaced ${job.file}`);
+	source.addFile(job.file, job.content,
+		       { switchTo: i == show,
+			 origin: job.origin	// undefined for `code=`
+		       });
+	consult.push(job.file);
+      } else {
+	source.printMessage(`${job.url} is consulted from its URL`);
+	consult.push(job.url);
+      }
+    });
+
+    if ( consult.length > 0 )
+      source.consultFiles(consult);
+
+    return consult;
+  }
+
+  /**
+   * Get the content for a single file of {@link Tinker#preload}.
+   * @param {object} job Holds either `content` or `url`
+   * @return {Promise<object>} `job` with `file` and `content` filled or
+   * `null` if the file could not be loaded.  If the URL does not refer
+   * to Prolog source it is returned unmodified for consulting the URL.
+   */
+  async #preload(job) {
+    const source = this.source;
+
+    if ( job.content !== undefined )
+      return job;
+
+    try
+    { const url = new URL(job.url, window.location.href);
+      if ( /\.qlf$/i.test(url.pathname) )
+	return { url: url.href };	// cannot show this in the editor.
+					// Must be global for consult/1 to
+					// see it as a URL.
+
+      const {content, url:origin} = await source.fetchFile(job.url);
+      return { file: source.mirrorPath(origin), content, origin };
+    } catch(e)
+    { source.printError(`Failed to load ${job.url}: ${loadErrorMessage(e)}`, e);
+      return null;
     }
   }
 }

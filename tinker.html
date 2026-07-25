@@ -125,7 +125,8 @@
     Prolog = Module.prolog;
     Tinker = new tinker.Tinker({ root:document.querySelector("div.content"),
 				 module:module,
-				 banner:true
+				 banner:true,
+				 preload:true
 			       });
     window.prolog = Prolog;
     window.tinker = Tinker;

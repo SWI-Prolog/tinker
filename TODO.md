@@ -1,6 +1,6 @@
 ## TODO
 
- - Implement `?code=` and `?url=` (copy SWISH?)
+ - Implement `?code=` and `?url=` (copy SWISH?)			[done]
  - Replace query input with CodeMirror instance.
  - Connect Prolog highlighting
  - Compile library to .qlf
@@ -18,6 +18,10 @@
    - Replace toplevel emscripten conditional code with wrapping
  - Turn into a new GIT submodule?
  - Allow save/load from GitHub?
+ - Write files that were loaded from a URL back to the server using
+   HTTP PUT, using the origin recorded for the file.  Requires a server
+   that accepts PUT as well as CORS pre-flight when the file is loaded
+   from another site.
  - Add cls/0 and html/1 predicates to tinker.pl		[done]
  - Extend debugger
    - Support more commands
