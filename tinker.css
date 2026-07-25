@@ -176,6 +176,12 @@ span.exch-files {
     text-decoration: none;
 }
 
+label.optimise {
+    margin-left: 1ex;
+    font-size: 90%;
+}
+label.optimise input { vertical-align: middle; }
+
 span.exch-files input.upload-file { display: none; }
 span.exch-files.upload-armed input.upload-file { display: inline; }
 

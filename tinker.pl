@@ -83,11 +83,18 @@
     complete_input/4.
 
 %!  tinker_init(+UserDir)
+%
+%   Prepare Prolog for running in Tinker.  Note that we compile in
+%   _optimised_ mode by default: the browser version is slow enough as
+%   it is.  This can be undone using the page parameter
+%   ``?optimise=false`` or by ``?- set_prolog_flag(optimise, false).``
+%   before loading a program.
 
 tinker_init(UserDir) :-
     set_prolog_flag(tty_control, true),
     set_prolog_flag(color_term, true),
     set_prolog_flag(hyperlink_term, true),
+    set_prolog_flag(optimise, true),
     set_stream(user_input, tty(true)),
     set_stream(user_output, tty(true)),
     set_stream(user_error, tty(true)),

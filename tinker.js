@@ -182,6 +182,7 @@ export class Source {
     this.armDownloadButton();
     this.armUploadButton();
     this.armShareButton();
+    this.armOptimise();
     this.armConsult();
   }
 
@@ -926,6 +927,44 @@ Note that many sites and mail programs truncate long links.`
   }
 
   /**
+   * Arm  the checkbox  that controls  the Prolog  flag `optimise`.
+   * Note  that the  flag only  affects  programs that  are loaded
+   * after it is changed.
+   */
+
+  armOptimise() {
+    const cb = this.byname("optimise");
+
+    if ( cb ) {
+      cb.addEventListener("change", (ev) => {
+	Prolog.call(`set_prolog_flag(optimise, ${cb.checked})`);
+	this.printMessage(
+	  `Compiling ${cb.checked ? "with" : "without"} optimisation. \
+This applies to programs that are loaded from now on.`);
+      });
+    }
+  }
+
+  /**
+   * Update the optimise  checkbox from the Prolog  flag.  Called after
+   * Prolog is initialised and after {@link Tinker#preload}, which may
+   * change the flag from the query string of the page.
+   */
+
+  showOptimise() {
+    const cb = this.byname("optimise");
+
+    if ( cb ) {
+      try
+      { const answer = Prolog.query("current_prolog_flag(optimise, V)").once();
+	cb.checked = answer.V == true || answer.V == "true";
+      } catch(e)
+      { console.error(e);
+      }
+    }
+  }
+
+  /**
    * Arm the form submit button.
    */
 
@@ -1502,6 +1541,9 @@ function loadCSS(url)
  *   - `?name=<file>` <br>
  *     Name for the file created from the preceding `code=`.  Default
  *     is `code.pl`.
+ *   - `?optimise=true` or `?optimise=false` <br>
+ *     Set the Prolog flag `optimise` before loading the files.  See
+ *     {@link Tinker#preload}.
  *
  * Values  of `url`  and `code`  must be  encoded using  JavaScript's
  * `encodeURIComponent()`.  Note that  this does not encode  `+`.  We
@@ -1513,8 +1555,8 @@ function loadCSS(url)
  * query string for its own purposes.
  *
  * @param {string} search Query string, e.g., `window.location.search`
- * @return {object[]} List of objects holding `type` (`"url"` or
- * `"code"`) and `value`, in the order they appear in `search`.
+ * @return {object[]} List of objects holding `type` (`"url"`, `"code"`
+ * or `"optimise"`) and `value`, in the order they appear in `search`.
  * Objects of type `"code"` may have a `name`.
  */
 
@@ -1524,7 +1566,7 @@ export function parsePreloadSearch(search) {
   if ( s == "" )
     return [];
 
-  const m = /^([a-zA-Z_][a-zA-Z0-9_]*)=/.exec(s);
+  const m = /^([a-zA-Z_][a-zA-Z0-9_]*)(=|&|$)/.exec(s);
   if ( !m )				// bare ?<url>
     return [ {type:"url", value:decodeURL(s)} ];
   if ( !preload_params.includes(m[1]) ) {
@@ -1550,6 +1592,14 @@ export function parsePreloadSearch(search) {
 	else
 	  console.warn(`Tinker: "name" does not follow a "code" parameter`);
         break;
+      case "optimise":
+	if ( /^(|true|yes|on|1)$/i.test(val) )
+	  items.push({type:key, value:true});
+	else if ( /^(false|no|off|0)$/i.test(val) )
+	  items.push({type:key, value:false});
+	else
+	  console.warn(`Tinker: ignoring "optimise=${val}"`);
+        break;
       default:
 	console.warn(`Tinker: ignoring query string parameter "${key}"`);
     }
@@ -1558,7 +1608,7 @@ export function parsePreloadSearch(search) {
   return items;
 }
 
-const preload_params = ["url", "code", "name"];
+const preload_params = ["url", "code", "name", "optimise"];
 
 /**
  * `decodeURIComponent()` that returns its input on invalid escapes.
@@ -3257,12 +3307,14 @@ export class Tinker {
     this.ready = Promise.all([ Tinker.prologReady, this.source.ready ])
 	                .then(() => this);
 
-    if ( options.preload )
-      this.ready
-	  .then(() => this.preload(options.preload === true
-				   ? window.location.search
-				   : options.preload))
-	  .catch((e) => console.error(e));
+    this.ready
+	.then(() => { if ( options.preload )		// may set `optimise`
+		        return this.preload(options.preload === true
+					    ? window.location.search
+					    : options.preload);
+		    })
+	.then(() => this.source.showOptimise())
+	.catch((e) => console.error(e));
   }
 
   /**
@@ -3298,6 +3350,8 @@ export class Tinker {
 	      ? source.codeFileName(item.name)
 	      : ( ++codes == 1 ? "code.pl" : `code_${codes}.pl` );
 	jobs.push({ file: source.userFile(name), content: item.value });
+      } else if ( item.type == "optimise" ) {
+	Prolog.call(`set_prolog_flag(optimise, ${item.value})`);
       } else {
 	jobs.push({ url: item.value });
       }

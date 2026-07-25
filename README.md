@@ -48,6 +48,12 @@ into the editor and consults them.  The accepted forms are
     file named `code.pl`.
   - `?name=<file>` <br>
     Name for the file created by the preceding `code=`.
+  - `?optimise=true` or `?optimise=false` <br>
+    Compile in _optimised_ mode.  Default is `true`.  Optimised
+    compilation is faster, but removes `assertion/1` and `debug/3`
+    calls from your program.  The __optimise__ checkbox next to the
+    _(Re)consult_ button shows and changes this setting.  Note that it
+    only affects programs that are loaded after it is changed.
 
 The &#128279; button below the editor  copies a link to the program you
 are editing.  If  this program was loaded from a URL  and you have not
