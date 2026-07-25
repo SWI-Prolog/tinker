@@ -163,7 +163,8 @@ export class Source {
       `${this.user_dir}/${opts.default_file_name||"scratch.pl"}`
     this.files = { current: this.default_file,
 		   list: [this.default_file],
-		   origins: {}		// file -> URL it was loaded from
+		   origins: {},		// file -> URL it was loaded from
+		   pristine: {}		// file -> hash as loaded from origin
 		 };
     this.select_file = this.byname("select-file");
 
@@ -180,6 +181,7 @@ export class Source {
     this.armDeleteFile();
     this.armDownloadButton();
     this.armUploadButton();
+    this.armShareButton();
     this.armConsult();
   }
 
@@ -324,6 +326,47 @@ export class Source {
    */
   fileOrigin(file) {
     return this.files.origins[file]||"";
+  }
+
+  /**
+   * Remember the content of `file` as it was loaded from its origin,
+   * so that we can tell whether the user changed it.  See
+   * {@link Source#isPristine}.
+   *
+   * @param {string} file Absolute path of a user file.
+   * @param {string} [content] Content as loaded.  If omitted, the file
+   * is no longer considered a copy of its origin.
+   */
+  setPristine(file, content) {
+    if ( content === undefined )
+      delete this.files.pristine[file];
+    else
+      this.files.pristine[file] = hashString(content);
+  }
+
+  /**
+   * @param {string} file Absolute path of a user file.
+   * @return {bool} `true` if `file` still holds the content that was
+   * loaded from its origin.
+   */
+  isPristine(file) {
+    const hash = this.files.pristine[file];
+    let content;
+
+    if ( hash === undefined )
+      return false;
+
+    if ( file == this.files.current ) {
+      content = this.value;
+    } else {
+      try
+      { content = Module.FS.readFile(file, {encoding:'utf8'});
+      } catch(e)
+      { return false;
+      }
+    }
+
+    return hash === hashString(content);
   }
 
   /**
@@ -490,6 +533,7 @@ export class Source {
     this.ensureDir(file);
     Module.FS.writeFile(file, content);	// before switchToFile(): that
     this.setOrigin(file, options.origin);// loads the file from the FS
+    this.setPristine(file, options.origin ? content : undefined);
     this.addFileOption(file);
 
     if ( this.files.current == file ) {	// switchToFile() is a no-op
@@ -650,6 +694,7 @@ export class Source {
     opt.parentNode.removeChild(opt);
     this.files.list = this.files.list.filter((n) => (n != file));
     this.setOrigin(file);
+    this.setPristine(file);
     this.persist.removeFile(file);
     Module.FS.unlink(file);
   }
@@ -800,6 +845,74 @@ export class Source {
 	} else {
 	  exch.classList.add("upload-armed")
 	}
+      });
+    }
+  }
+
+  /**
+   * URL that  opens Tinker with the  current file loaded.  This  is the
+   * URL of the page without its query string, extended with
+   *
+   *   - `url=`, if the file was loaded from a URL and the user did not
+   *     change it.  This keeps the file small and, unlike `code=`,
+   *     preserves files loaded by this file.
+   *   - `code=` and `name=` otherwise, which carry the content of the
+   *     editor and the name of the file.
+   *
+   * See {@link parsePreloadSearch}.
+   *
+   * @return {string} URL that can be shared with others.
+   */
+  shareURL() {
+    const base = `${window.location.origin}${window.location.pathname}`;
+    const file = this.files.current;
+    const origin = this.fileOrigin(file);
+
+    if ( origin && this.isPristine(file) )
+      return `${base}?url=${encodeURIComponent(origin)}`;
+
+    return `${base}?code=${encodeURIComponent(this.value)}` +
+	         `&name=${encodeURIComponent(this.baseName(file))}`;
+  }
+
+  /**
+   * Copy {@link Source#shareURL} to the clipboard.  If we may not use
+   * the clipboard (the  page must be served  from a _secure context_)
+   * we ask the user to copy the URL.
+   *
+   * @param {HTMLElement} [btn] Element that is briefly modified to
+   * acknowledge the copy.
+   * @return {Promise<string>} the URL.
+   */
+  async share(btn) {
+    const url = this.shareURL();
+
+    try
+    { await navigator.clipboard.writeText(url);
+      if ( btn )
+      { const label = btn.textContent;
+	btn.textContent = "✔";		// ✔
+	setTimeout(() => { btn.textContent = label; }, 1500);
+      }
+      this.printMessage(
+	url.length > 2000
+	  ? `Copied a link of ${url.length} characters to the clipboard. \
+Note that many sites and mail programs truncate long links.`
+	  : `Copied a link of ${url.length} characters to the clipboard`);
+    } catch(e)
+    { this.printError(`Could not copy the link: ${e.message||e}`, e);
+      window.prompt("Copy this link to share the program", url);
+    }
+
+    return url;
+  }
+
+  armShareButton() {
+    const btn = this.elem.querySelector("a.btn.share");
+    if ( btn ) {
+      btn.addEventListener("click", (ev) => {
+	ev.preventDefault();
+	this.share(btn);
       });
     }
   }
@@ -1469,6 +1582,25 @@ function safeFileName(s) {
   return decodeParam(s)
 	     .replace(/[^a-zA-Z0-9._-]/g, "_")
 	     .replace(/^\.+/, "");
+}
+
+/**
+ * Hash a  string.  Used to  tell whether the  user changed a  file we
+ * loaded from a URL.  This is FNV-1a, which is short and good enough
+ * to detect a change.
+ * @param {string} s
+ * @return {string} hash as a hexadecimal string
+ */
+
+function hashString(s) {
+  let h = 0x811c9dc5;
+
+  for(let i=0; i<s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+
+  return (h>>>0).toString(16);
 }
 
 /**
@@ -2956,7 +3088,8 @@ export class Persist {
     { const saved = JSON.parse(f);
       if ( Array.isArray(saved.list) ) files.list    = saved.list;
       if ( saved.current )             files.current = saved.current;
-      files.origins = saved.origins||{};
+      files.origins  = saved.origins||{};
+      files.pristine = saved.pristine||{};
     }
 
     this.source.files.list.forEach((f) => self.restoreFile(f));
@@ -2995,16 +3128,22 @@ export class Persist {
 
     const l = this.source.files.list.filter((n) => this.source.isUserFile(n));
     const origins = {};
+    const pristine = {};
     l.forEach((f) => { const url = this.source.fileOrigin(f);
 		       if ( url )
-			 origins[f] = url;
+		       { origins[f] = url;
+			 const hash = this.source.files.pristine[f];
+			 if ( hash !== undefined )
+			   pristine[f] = hash;
+		       }
 		     });
     const save =
 	  { list: l,
 	    current: l.includes(this.source.files.current)
 		? this.source.files.current
 		: this.source.default_file,
-	    origins
+	    origins,
+	    pristine
 	  };
 
     localStorage.setItem(this.itemKey("files"), JSON.stringify(save));

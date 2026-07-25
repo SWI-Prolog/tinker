@@ -49,6 +49,15 @@ into the editor and consults them.  The accepted forms are
   - `?name=<file>` <br>
     Name for the file created by the preceding `code=`.
 
+The &#128279; button below the editor  copies a link to the program you
+are editing.  If  this program was loaded from a URL  and you have not
+changed it we copy  a `?url=` link.  This keeps the  link short and, as
+the program  is loaded from  its URL, files  loaded by this  program are
+found as well.  Otherwise we copy a  `?code=` link that carries the text
+from the  editor as well  as the name of  the file, which  allows for
+sharing a small program without putting it on a server.  Note that URLs
+carry a limited amount of text.
+
 Both  relative and  absolute  URLs are  accepted.   Values of  `url=`
 and `code=`  must be encoded  using JavaScript's `encodeURIComponent()`.
 Note  that  this does  __not__  encode  `+`,  which we  therefore  do

@@ -79,7 +79,9 @@ and `Prolog` (`Module.prolog`) are initialised once by the `Tinker` constructor.
   `mirror_dir` (`/prolog/web/<host>/<url path>`) and is consulted **under its
   URL**, not its local path.  `setOrigin`/`fileOrigin`/`mirrorFile`/`mirrorPath`/
   `addMirror`/`syncFile` manage this (the last three are called from
-  `tinker.pl`); `displayName()` is what the file menu shows.
+  `tinker.pl`); `displayName()` is what the file menu shows.  `files.pristine`
+  holds a hash of each mirror as fetched, which is what lets `shareURL()` decide
+  between a `?url=` and a `?code=`+`name=` link.
   Demo entries in the file menu come from `examples/index.json` and load from
   `/wasm/examples/<name>`.
 - `Input` — the `<input>` embedded in a `Query`; behaviour depends on the query
